@@ -1,0 +1,48 @@
+{
+  "created_at": "2026-06-28T14:10:32.418384+00:00",
+  "bench_name": "vadd_N1024",
+  "config": "o3_nopf",
+  "profile": "medium_boom_like",
+  "gem5_bin": "/home/luot/27thesis/tools/gem5/build/RISCV/gem5.opt",
+  "benchmark": "/home/luot/27thesis/build/vadd_N1024.riscv",
+  "config_script": "/home/luot/27thesis/gem5_configs/riscv_o3_baseline.py",
+  "results_dir": "/home/luot/27thesis/results/vadd_N1024/o3_nopf",
+  "command": [
+    "/home/luot/27thesis/tools/gem5/build/RISCV/gem5.opt",
+    "--outdir=/home/luot/27thesis/results/vadd_N1024/o3_nopf",
+    "/home/luot/27thesis/gem5_configs/riscv_o3_baseline.py",
+    "--cmd",
+    "/home/luot/27thesis/build/vadd_N1024.riscv",
+    "--config",
+    "o3_nopf",
+    "--profile",
+    "medium_boom_like",
+    "--mem-size",
+    "512MiB",
+    "--cache-line-size",
+    "64",
+    "--sys-clock",
+    "1GHz",
+    "--cpu-clock",
+    "2GHz",
+    "--stridepf-degree",
+    "4",
+    "--stridepf-latency",
+    "1"
+  ],
+  "gem5_args": [],
+  "bench_args": [],
+  "system": {
+    "mem_size": "512MiB",
+    "cache_line_size": 64,
+    "sys_clock": "1GHz",
+    "cpu_clock": "2GHz"
+  },
+  "stride_prefetcher": {
+    "enabled": false,
+    "degree": 4,
+    "latency": 1,
+    "prefetch_on_access": false
+  },
+  "note": "BOOM-like gem5 O3 baseline inspired by public BOOM configs; not a cycle-accurate BOOM reproduction."
+}
