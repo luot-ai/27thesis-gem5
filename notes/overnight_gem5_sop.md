@@ -58,6 +58,16 @@ For a one-shot build progress summary:
 ./scripts/monitor_gem5_build.sh
 ```
 
+If the build has been stopped or killed, restart it manually before leaving:
+
+```bash
+cd /home/luot/27thesis/tools/gem5
+scons build/RISCV/gem5.opt -j4
+```
+
+Use `-j2` instead of `-j4` if the VM starts swapping heavily or becomes
+unresponsive.
+
 ## Commit Rules
 
 Commit after each step that creates a meaningful, reviewable state.
@@ -221,22 +231,21 @@ git commit -m "step 8: add gem5 stats parser"
 git push origin main
 ```
 
-## Optional Watch-Only Shell Helper
+## Optional Low-Overhead Watch Helper
 
-This helper does not run Codex. It only waits for `gem5.opt` and writes a marker
-file when the binary appears:
+This helper does not run Codex and does not inspect the build tree deeply. It
+only checks every 5 hours whether `gem5.opt` exists, then writes a marker file
+when the binary appears:
 
 ```bash
 mkdir -p logs
 nohup bash -lc '
   cd /home/luot/27thesis
   while [ ! -x tools/gem5/build/RISCV/gem5.opt ]; do
-    date
-    ./scripts/monitor_gem5_build.sh || true
-    sleep 900
+    printf "%s gem5.opt not ready yet\n" "$(date -Is)"
+    sleep 18000
   done
-  date
-  echo "gem5.opt ready" > logs/GEM5_READY
+  printf "%s gem5.opt ready\n" "$(date -Is)" | tee logs/GEM5_READY
 ' > logs/wait_for_gem5.log 2>&1 &
 ```
 
@@ -257,4 +266,3 @@ gem5.opt 应该已经编好了。请按 notes/overnight_gem5_sop.md 继续：
 再 Step 7 stride-prefetch，最后 Step 8 stats parser。
 每完成一个 step 就 commit + push；不要提交 tools/gem5。
 ```
-
