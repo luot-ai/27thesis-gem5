@@ -1,119 +1,110 @@
 # gem5 RISC-V O3 Baseline
 
-This project is building a reproducible gem5 RISC-V O3 baseline for thesis experiments on streaming memory-access optimization.
+本仓库用于搭建一个可复现的 gem5 RISC-V O3 baseline，服务于毕业论文中“面向边缘端信号与智能处理的流式访存优化研究”的性能对比。
 
-本阶段只是建立 baseline，不代表 stream engine 已经完成。
+当前阶段的目标是建立可信 CPU baseline，不代表 stream engine 已经实现。
 
-## Current Status
+## 当前状态
 
-- Minimal benchmark source: `benchmarks/vadd/vadd.c`
-- Default problem size: `N = 1024`
-- Build script: `scripts/build_benchmarks.sh`
-- Built benchmark: `build/vadd_N1024.riscv`
-- Environment notes: `notes/env_check.md`
-- BOOM-like O3 config: `gem5_configs/riscv_o3_baseline.py`
-- gem5 run wrapper: `scripts/run_gem5.py`
-- gem5 O3 runs: `o3_nopf` and `o3_stridepf` completed for `vadd_N1024`
-- Stats summary: `results/summary.csv`
-- stream engine: not implemented in this stage
+- 最小 benchmark：`benchmarks/vadd/vadd.c`
+- 默认问题规模：`N = 1024`
+- RISC-V binary：`build/vadd_N1024.riscv`
+- gem5 binary：`tools/gem5/build/RISCV/gem5.opt`
+- BOOM-like O3 配置：`gem5_configs/riscv_o3_baseline.py`
+- BOOM-like profile：`gem5_configs/boom_like_profiles.py`
+- gem5 运行包装脚本：`scripts/run_gem5.py`
+- stats 解析脚本：`scripts/parse_stats.py`
+- 已完成结果：`results/vadd_N1024/o3_nopf` 和 `results/vadd_N1024/o3_stridepf`
+- 汇总表格：`results/summary.csv`
 
-## Project Layout
+## 项目结构
 
 ```text
 benchmarks/
-  vadd/vadd.c                 Minimal vector-add benchmark.
+  vadd/vadd.c                 最小 vector-add benchmark
 build/
-  vadd_N1024.riscv            Static RISC-V benchmark binary.
+  vadd_N1024.riscv            静态链接 RISC-V benchmark binary
 gem5_configs/
-  boom_like_profiles.py       BOOM-like O3 profile values.
-  riscv_o3_baseline.py        gem5 SE-mode O3 system config.
+  boom_like_profiles.py       BOOM-like O3 profile 参数
+  riscv_o3_baseline.py        gem5 SE-mode O3 system config
 notes/
-  env_check.md                Environment and setup status.
-  boom_config_survey.md       Public BOOM configuration survey.
+  env_check.md                环境与安装状态记录
+  boom_config_survey.md       BOOM 公开配置调研，英文版
+  boom_survey_cn.md           BOOM 公开配置调研，中文版
+  boom_like_config_verification.md
+                              BOOM-like O3 参数验证记录
+  vadd_baseline_results.md    当前 vadd baseline 结果说明
 scripts/
-  bootstrap_host_deps.sh      Ubuntu host dependency installer.
-  build_benchmarks.sh         RISC-V benchmark build script.
-  monitor_gem5_build.sh       One-shot gem5 build progress checker.
-  parse_stats.py              gem5 stats-to-CSV parser.
-  run_gem5.py                 gem5 run wrapper.
+  bootstrap_host_deps.sh      Ubuntu host 依赖安装脚本
+  build_benchmarks.sh         RISC-V benchmark 编译脚本
+  monitor_gem5_build.sh       gem5 构建进度一次性检查脚本
+  parse_stats.py              gem5 stats-to-CSV 解析脚本
+  run_gem5.py                 gem5 运行包装脚本
 results/
-  <bench-name>/<config>/      Per-run output directory.
-  summary.csv                 Parsed experiment summary.
+  vadd_N1024/o3_nopf/         no-prefetch O3 结果
+  vadd_N1024/o3_stridepf/     stride-prefetch O3 结果
+  summary.csv                 stats 汇总表
 ```
 
-## Step Progress
+## Step 进度
 
-| Step | Status | Notes |
+| Step | 状态 | 说明 |
 | --- | --- | --- |
-| 1. Environment check | Done | See `notes/env_check.md`. |
-| 2. Minimal vadd benchmark | Done | Source in `benchmarks/vadd/vadd.c`. |
-| 3. RISC-V build script | Done | Produces `build/vadd_N1024.riscv`. |
-| 4. gem5 O3 no-prefetch run | Done | `vadd_N1024/o3_nopf` completed. |
-| 5. BOOM public config survey | Done | See `notes/boom_config_survey.md`. |
-| 6. BOOM-like O3 config | Done | Medium-like O3 profile implemented and verified. |
-| 7. Stride-prefetch baseline | Done | `vadd_N1024/o3_stridepf` completed. |
-| 8. Stats parser | Done | `scripts/parse_stats.py` writes `results/summary.csv`. |
+| 1. 环境检查 | 已完成 | 见 `notes/env_check.md` |
+| 2. 最小 vadd benchmark | 已完成 | 源码在 `benchmarks/vadd/vadd.c` |
+| 3. RISC-V 编译脚本 | 已完成 | 生成 `build/vadd_N1024.riscv` |
+| 4. gem5 O3 no-prefetch run | 已完成 | `vadd_N1024/o3_nopf` 已跑通 |
+| 5. BOOM 公开配置调研 | 已完成 | 见 `notes/boom_config_survey.md` 和 `notes/boom_survey_cn.md` |
+| 6. BOOM-like O3 配置 | 已完成 | Medium-like O3 profile 已实现并验证 |
+| 7. stride-prefetch baseline | 已完成 | `vadd_N1024/o3_stridepf` 已跑通 |
+| 8. stats 整理脚本 | 已完成 | `scripts/parse_stats.py` 生成 `results/summary.csv` |
 
-## RISC-V Toolchain
+## 环境准备
 
-Install a RISC-V Linux GNU compiler, or point `RISCV_GCC` at an existing compiler.
-
-On Ubuntu:
+安装 host 依赖和 RISC-V 工具链：
 
 ```bash
 sudo ./scripts/bootstrap_host_deps.sh
 ```
 
-Build the current benchmark:
+重新编译当前 benchmark：
 
 ```bash
 ./scripts/build_benchmarks.sh
 ```
 
-Useful overrides:
+可覆盖编译器、优化等级和问题规模：
 
 ```bash
 RISCV_GCC=riscv64-linux-gnu-gcc OPT=-O3 N=1024 ./scripts/build_benchmarks.sh
 ```
 
-## gem5
+## gem5 构建
 
-gem5 source has been cloned to `tools/gem5`, and the RISCV target has been
-built at `tools/gem5/build/RISCV/gem5.opt`.
+本地 gem5 源码位于 `tools/gem5`。RISCV target 已经构建到：
 
-To rebuild the RISCV target:
+```text
+tools/gem5/build/RISCV/gem5.opt
+```
+
+如需重新构建：
 
 ```bash
 cd tools/gem5
-scons build/RISCV/gem5.opt -j2
+scons build/RISCV/gem5.opt -j4
 ```
 
-`-j2` is a conservative default for the current VM. If memory pressure is low, `-j4` is also reasonable.
+如果 VM 内存压力较大，可以改用更保守的 `-j2`。
 
-The run wrapper accepts `--gem5-bin /path/to/gem5.opt`, so the project does not depend on a hard-coded absolute path.
-
-To check whether the build has finished without continuously monitoring it:
+检查 `gem5.opt` 是否存在：
 
 ```bash
 test -x tools/gem5/build/RISCV/gem5.opt && echo "gem5.opt ready" || echo "still building"
 ```
 
-For a fuller one-shot progress check:
+## 运行 baseline
 
-```bash
-./scripts/monitor_gem5_build.sh
-```
-
-## BOOM-like O3 Config
-
-The current BOOM-like profile is defined in:
-
-```text
-gem5_configs/boom_like_profiles.py
-gem5_configs/riscv_o3_baseline.py
-```
-
-The medium BOOM-like no-prefetch baseline can be run with:
+运行 no-prefetch O3 baseline：
 
 ```bash
 python3 scripts/run_gem5.py \
@@ -123,24 +114,7 @@ python3 scripts/run_gem5.py \
   --config o3_nopf
 ```
 
-The wrapper writes `config.json`, `simout`, and `simerr` under
-`results/<bench-name>/<config>/`. If gem5 exits successfully, `stats.txt` and
-the usual gem5 output files will also be in the same directory.
-
-To check the command layout before `gem5.opt` exists:
-
-```bash
-python3 scripts/run_gem5.py \
-  --gem5-bin tools/gem5/build/RISCV/gem5.opt \
-  --benchmark build/vadd_N1024.riscv \
-  --bench-name vadd_N1024 \
-  --config o3_nopf \
-  --dry-run
-```
-
-The profile is BOOM-like only: it maps public BOOM-style widths and queue sizes to gem5 O3 parameters, but it is not a cycle-accurate BOOM RTL reproduction.
-
-To run the stride-prefetch baseline:
+运行 stride-prefetch O3 baseline：
 
 ```bash
 python3 scripts/run_gem5.py \
@@ -150,58 +124,127 @@ python3 scripts/run_gem5.py \
   --config o3_stridepf
 ```
 
-## Result Directory Contract
-
-Each experiment should use one result directory:
+每次运行会写入：
 
 ```text
-results/
-  vadd_N1024/
-    o3_nopf/
-      config.json
-      simout
-      simerr
-      stats.txt
-    o3_stridepf/
-      config.json
-      simout
-      simerr
-      stats.txt
+results/<bench-name>/<config>/
+  config.json
+  config.ini
+  simout
+  simerr
+  stats.txt
 ```
 
-`config.json` records the command, benchmark, gem5 config, clock/cache
-settings, and whether stride prefetching was requested. This makes failed runs
-useful too, because the exact attempted command remains visible.
+`config.json` 记录运行命令、benchmark、profile、cache/clock 设置和是否启用 stride prefetcher。即使运行失败，也应保留 `simout`、`simerr` 和 `config.json` 用于诊断。
 
-## Stats Summary
+## BOOM-like O3 配置说明
 
-Regenerate the compact CSV summary with:
+当前 profile 是一个 Medium-like、受公开 BOOM 配置启发的 gem5 O3 baseline。核心参数包括：
+
+| 参数 | 当前值 |
+| --- | ---: |
+| `fetchWidth` | 4 |
+| `decodeWidth` | 4 |
+| `renameWidth` | 4 |
+| `dispatchWidth` | 4 |
+| `issueWidth` | 4 |
+| `wbWidth` | 4 |
+| `commitWidth` | 4 |
+| `numROBEntries` | 128 |
+| `numIQEntries` | 64 |
+| `LQEntries` | 32 |
+| `SQEntries` | 32 |
+| `numPhysIntRegs` | 128 |
+| `numPhysFloatRegs` | 128 |
+| `numPhysVecRegs` | 128 |
+
+重要表述：
+
+```text
+This is a BOOM-like O3 baseline inspired by public BOOM configurations.
+It is not a cycle-accurate reproduction of BOOM.
+```
+
+也就是说，本项目目标是在 gem5 中建立一个可信的乱序 CPU baseline，而不是复现 BOOM RTL 时序、Chisel 实现细节或 Chipyard system integration。
+
+## 当前结果摘要
+
+当前 `vadd_N1024` 的核心结果如下：
+
+| 指标 | `o3_nopf` | `o3_stridepf` |
+| --- | ---: | ---: |
+| instructions | 139167 | 139167 |
+| cycles | 210900 | 153872 |
+| IPC | 0.659872 | 0.904434 |
+| CPI | 1.515445 | 1.105664 |
+| L1D misses | 10655 | 5049 |
+| L1D miss rate | 0.369914 | 0.169435 |
+
+相对 `o3_nopf`，`o3_stridepf` 在这个小 kernel 上：
+
+- cycle 数减少约 27.0%；
+- IPC 提高约 37.1%；
+- L1D miss 数减少约 52.6%。
+
+更完整的解释见：
+
+```text
+notes/vadd_baseline_results.md
+```
+
+## 重新生成 stats 汇总
 
 ```bash
 python3 scripts/parse_stats.py --results-dir results
 ```
 
-Current output:
+输出：
 
 ```text
 results/summary.csv
 ```
 
-## Next Steps
+当前 parser 会提取：
 
-1. Add more streaming benchmarks beyond `vadd_N1024`.
-2. Decide which result artifacts should be tracked in git long term.
-3. Extend `scripts/parse_stats.py` if later benchmarks need more metrics.
-4. Use these baselines as the comparison point before adding stream-engine work.
+- instruction / tick / cycle / IPC / CPI；
+- L1D、L1I、L2 miss 指标；
+- stride-prefetch 的 `pfIssued`、`pfUseful`、`accuracy`、`coverage` 等指标。
 
-## Baseline Scope
+字段缺失时会留空，不会崩溃。
 
-The immediate baseline flow now runs `vadd_N1024` on gem5 O3 with no
-prefetching and with stride prefetching, then summarizes the stats.
+## git 结果文件策略
 
-This is a BOOM-like O3 baseline inspired by public BOOM configurations. It is not a cycle-accurate reproduction of BOOM.
+建议跟踪：
 
-## Group Meeting Wording
+- `results/**/config.json`
+- `results/**/config.ini`
+- `results/**/simout`
+- `results/**/simerr`
+- `results/**/stats.txt`
+- `results/summary.csv`
+
+建议忽略：
+
+- `tools/`
+- `logs/`
+- `results/**/config.dot`
+- `results/**/config.dot.pdf`
+- `results/**/config.dot.svg`
+- `results/**/citations.bib`
+
+原因是 `tools/` 和 `logs/` 属于本地环境，`config.dot*` 与 `citations.bib` 属于 gem5 可再生输出。真正用于复现实验和分析的关键信息已经保存在 `config.json`、`config.ini`、`simout/simerr`、`stats.txt` 和 `summary.csv`。
+
+## 后续工作
+
+建议下一阶段先扩展 benchmark，再考虑 stream-engine 机制：
+
+1. 增加 `saxpy`、`triad` 或 `stencil1d` 等流式 kernel；
+2. 扩展 `scripts/build_benchmarks.sh` 支持多个 benchmark；
+3. 增加批量运行脚本，例如 `scripts/run_baselines.sh`；
+4. 继续扩展 `scripts/parse_stats.py` 的派生指标，例如 speedup、cycle reduction、miss reduction；
+5. 在多个 benchmark 上比较 `o3_nopf`、`o3_stridepf` 和后续 stream-engine 方案。
+
+## 组会表述
 
 本阶段目标不是完成 stream engine 建模，而是先建立可信的 O3 CPU baseline。
 

@@ -1,0 +1,15 @@
+# Local external source/build tree.
+tools/
+
+# Local logs and background-run output.
+logs/
+
+# Python caches.
+__pycache__/
+*.py[cod]
+
+# gem5-generated visualizations and citation files can be regenerated.
+results/**/config.dot
+results/**/config.dot.pdf
+results/**/config.dot.svg
+results/**/citations.bib
