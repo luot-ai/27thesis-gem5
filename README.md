@@ -32,6 +32,8 @@ notes/
   env_check.md                环境与安装状态记录
   boom_config_survey.md       BOOM 公开配置调研，英文版
   boom_survey_cn.md           BOOM 公开配置调研，中文版
+  boom_detailed_config_survey_cn.md
+                              BOOM 细粒度配置调研：FU/cache/BPD
   boom_like_config_verification.md
                               BOOM-like O3 参数验证记录
   vadd_baseline_results.md    当前 vadd baseline 结果说明
