@@ -13,7 +13,8 @@ This project is building a reproducible gem5 RISC-V O3 baseline for thesis exper
 - Environment notes: `notes/env_check.md`
 - BOOM-like O3 config: `gem5_configs/riscv_o3_baseline.py`
 - gem5 run wrapper: `scripts/run_gem5.py`
-- gem5 O3 runs: blocked until `tools/gem5/build/RISCV/gem5.opt` is built
+- gem5 O3 runs: `o3_nopf` and `o3_stridepf` completed for `vadd_N1024`
+- Stats summary: `results/summary.csv`
 - stream engine: not implemented in this stage
 
 ## Project Layout
@@ -33,9 +34,11 @@ scripts/
   bootstrap_host_deps.sh      Ubuntu host dependency installer.
   build_benchmarks.sh         RISC-V benchmark build script.
   monitor_gem5_build.sh       One-shot gem5 build progress checker.
+  parse_stats.py              gem5 stats-to-CSV parser.
   run_gem5.py                 gem5 run wrapper.
 results/
   <bench-name>/<config>/      Per-run output directory.
+  summary.csv                 Parsed experiment summary.
 ```
 
 ## Step Progress
@@ -45,11 +48,11 @@ results/
 | 1. Environment check | Done | See `notes/env_check.md`. |
 | 2. Minimal vadd benchmark | Done | Source in `benchmarks/vadd/vadd.c`. |
 | 3. RISC-V build script | Done | Produces `build/vadd_N1024.riscv`. |
-| 4. gem5 run wrapper | Done | Ready, but real run waits for `gem5.opt`. |
+| 4. gem5 O3 no-prefetch run | Done | `vadd_N1024/o3_nopf` completed. |
 | 5. BOOM public config survey | Done | See `notes/boom_config_survey.md`. |
-| 6. BOOM-like O3 config | Done | Medium-like O3 profile implemented. |
-| 7. Stride-prefetch baseline | Prepared | Entry exists as `o3_stridepf`; must be verified after gem5 builds. |
-| 8. Stats parser | Not started | Good next scripting task after docs. |
+| 6. BOOM-like O3 config | Done | Medium-like O3 profile implemented and verified. |
+| 7. Stride-prefetch baseline | Done | `vadd_N1024/o3_stridepf` completed. |
+| 8. Stats parser | Done | `scripts/parse_stats.py` writes `results/summary.csv`. |
 
 ## RISC-V Toolchain
 
@@ -75,9 +78,10 @@ RISCV_GCC=riscv64-linux-gnu-gcc OPT=-O3 N=1024 ./scripts/build_benchmarks.sh
 
 ## gem5
 
-gem5 source has been cloned to `tools/gem5`. No local `gem5.opt` has been built yet.
+gem5 source has been cloned to `tools/gem5`, and the RISCV target has been
+built at `tools/gem5/build/RISCV/gem5.opt`.
 
-Build the RISCV target:
+To rebuild the RISCV target:
 
 ```bash
 cd tools/gem5
@@ -109,7 +113,7 @@ gem5_configs/boom_like_profiles.py
 gem5_configs/riscv_o3_baseline.py
 ```
 
-After `gem5.opt` is available, the medium BOOM-like no-prefetch baseline can be run with:
+The medium BOOM-like no-prefetch baseline can be run with:
 
 ```bash
 python3 scripts/run_gem5.py \
@@ -136,6 +140,16 @@ python3 scripts/run_gem5.py \
 
 The profile is BOOM-like only: it maps public BOOM-style widths and queue sizes to gem5 O3 parameters, but it is not a cycle-accurate BOOM RTL reproduction.
 
+To run the stride-prefetch baseline:
+
+```bash
+python3 scripts/run_gem5.py \
+  --gem5-bin tools/gem5/build/RISCV/gem5.opt \
+  --benchmark build/vadd_N1024.riscv \
+  --bench-name vadd_N1024 \
+  --config o3_stridepf
+```
+
 ## Result Directory Contract
 
 Each experiment should use one result directory:
@@ -159,17 +173,31 @@ results/
 settings, and whether stride prefetching was requested. This makes failed runs
 useful too, because the exact attempted command remains visible.
 
+## Stats Summary
+
+Regenerate the compact CSV summary with:
+
+```bash
+python3 scripts/parse_stats.py --results-dir results
+```
+
+Current output:
+
+```text
+results/summary.csv
+```
+
 ## Next Steps
 
-1. Finish building `tools/gem5/build/RISCV/gem5.opt`.
-2. Run `vadd_N1024` with `--config o3_nopf`.
-3. Inspect `simout`, `simerr`, and `stats.txt`.
-4. Verify whether `--config o3_stridepf` works with this gem5 version.
-5. Add `scripts/parse_stats.py` to produce a compact result table.
+1. Add more streaming benchmarks beyond `vadd_N1024`.
+2. Decide which result artifacts should be tracked in git long term.
+3. Extend `scripts/parse_stats.py` if later benchmarks need more metrics.
+4. Use these baselines as the comparison point before adding stream-engine work.
 
 ## Baseline Scope
 
-The immediate goal is to run `vadd_N1024` on gem5 O3 with no prefetching. After that, the project will verify the stride-prefetch baseline and add stats parsing.
+The immediate baseline flow now runs `vadd_N1024` on gem5 O3 with no
+prefetching and with stride prefetching, then summarizes the stats.
 
 This is a BOOM-like O3 baseline inspired by public BOOM configurations. It is not a cycle-accurate reproduction of BOOM.
 

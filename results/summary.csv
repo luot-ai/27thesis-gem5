@@ -1,0 +1,3 @@
+benchmark,config,stats_path,simInsts,simTicks,finalTick,hostSeconds,numCycles,ipc,cpi,committedInsts,committedInstsNotNOP,l1d_overall_misses,l1d_overall_miss_rate,l1i_overall_misses,l1i_overall_miss_rate,l2_overall_misses,l2_overall_miss_rate,prefetch_issued,prefetch_useful,prefetch_unused,prefetch_accuracy,prefetch_coverage,prefetch_late
+vadd_N1024,o3_nopf,/home/luot/27thesis/results/vadd_N1024/o3_nopf/stats.txt,139167,105449500,105449500,2.43,210900,0.659872,1.515445,139167,139167,10655,0.369914,540,0.022939,1502,0.967784,,,,,,
+vadd_N1024,o3_stridepf,/home/luot/27thesis/results/vadd_N1024/o3_stridepf/stats.txt,139167,76935500,76935500,2.66,153872,0.904434,1.105664,139167,139167,5049,0.169435,543,0.023169,1796,0.972388,3501,488,117,0.139389,0.534502,2526

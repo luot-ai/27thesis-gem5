@@ -15,13 +15,19 @@ FIELDS = [
     ("ipc", "system.cpu.ipc"),
     ("cpi", "system.cpu.cpi"),
     ("committedInsts", "system.cpu.commitStats0.numInsts"),
+    ("committedInstsNotNOP", "system.cpu.commitStats0.numInstsNotNOP"),
     ("l1d_overall_misses", "system.cpu.dcache.overallMisses::total"),
     ("l1d_overall_miss_rate", "system.cpu.dcache.overallMissRate::total"),
     ("l1i_overall_misses", "system.cpu.icache.overallMisses::total"),
-    ("l2_overall_misses", "system.l2.overallMisses::total"),
-    ("l2_overall_miss_rate", "system.l2.overallMissRate::total"),
-    ("prefetch_issued", "system.cpu.dcache.prefetcher.numIssuedPrefetches"),
-    ("prefetch_useful", "system.cpu.dcache.prefetcher.numUsefulPrefetches"),
+    ("l1i_overall_miss_rate", "system.cpu.icache.overallMissRate::total"),
+    ("l2_overall_misses", "system.l2cache.overallMisses::total"),
+    ("l2_overall_miss_rate", "system.l2cache.overallMissRate::total"),
+    ("prefetch_issued", "system.cpu.dcache.prefetcher.pfIssued"),
+    ("prefetch_useful", "system.cpu.dcache.prefetcher.pfUseful"),
+    ("prefetch_unused", "system.cpu.dcache.prefetcher.pfUnused"),
+    ("prefetch_accuracy", "system.cpu.dcache.prefetcher.accuracy"),
+    ("prefetch_coverage", "system.cpu.dcache.prefetcher.coverage"),
+    ("prefetch_late", "system.cpu.dcache.prefetcher.pfLate"),
 ]
 
 
