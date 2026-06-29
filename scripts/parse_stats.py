@@ -80,7 +80,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["benchmark", "config", "stats_path"] + [name for name, _ in FIELDS]
     with output.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

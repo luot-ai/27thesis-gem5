@@ -1,0 +1,14 @@
+Global frequency set at 1000000000000 ticks per second
+gem5 Simulator System.  https://www.gem5.org
+gem5 is copyrighted software; use the --copyright option for details.
+
+gem5 version 25.1.0.1
+gem5 compiled Jun 29 2026 00:09:09
+gem5 started Jun 29 2026 19:29:33
+gem5 executing on luot-VMware-Virtual-Platform, pid 420319
+command line: /home/luot/27thesis/tools/gem5/build/RISCV/gem5.opt --outdir=/home/luot/27thesis/results/vadd_N16384/o3_stridepf /home/luot/27thesis/gem5_configs/riscv_o3_baseline.py --cmd /home/luot/27thesis/build/vadd_N16384.riscv --config o3_stridepf --profile medium_boom_like --mem-size 512MiB --cache-line-size 64 --sys-clock 1GHz --cpu-clock 2GHz --stridepf-degree 4 --stridepf-latency 1
+
+info: Standard input is not a terminal, disabling listeners.
+Beginning simulation: config=o3_stridepf, profile=medium_boom_like, cmd=/home/luot/27thesis/build/vadd_N16384.riscv
+vadd passed N=16384
+Exiting @ tick 176294500 because exiting with last active thread context

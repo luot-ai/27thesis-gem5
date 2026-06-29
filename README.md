@@ -7,14 +7,15 @@
 ## 当前状态
 
 - 最小 benchmark：`benchmarks/vadd/vadd.c`
-- 默认问题规模：`N = 1024`
-- RISC-V binary：`build/vadd_N1024.riscv`
+- 默认 sanity-check 规模：`N = 1024`
+- 已补充规模：`N = 16384`
+- RISC-V binary：`build/vadd_N1024.riscv`、`build/vadd_N16384.riscv`
 - gem5 binary：`tools/gem5/build/RISCV/gem5.opt`
 - BOOM-like O3 配置：`gem5_configs/riscv_o3_baseline.py`
 - BOOM-like profile：`gem5_configs/boom_like_profiles.py`
 - gem5 运行包装脚本：`scripts/run_gem5.py`
 - stats 解析脚本：`scripts/parse_stats.py`
-- 已完成结果：`results/vadd_N1024/o3_nopf` 和 `results/vadd_N1024/o3_stridepf`
+- 已完成结果：`vadd_N1024` 和 `vadd_N16384` 的 `o3_nopf` / `o3_stridepf`
 - 汇总表格：`results/summary.csv`
 
 ## 项目结构
@@ -23,7 +24,7 @@
 benchmarks/
   vadd/vadd.c                 最小 vector-add benchmark
 build/
-  vadd_N1024.riscv            静态链接 RISC-V benchmark binary
+  vadd_N*.riscv               静态链接 RISC-V benchmark binary
 gem5_configs/
   boom_like_profiles.py       BOOM-like O3 profile 参数
   riscv_o3_baseline.py        gem5 SE-mode O3 system config
@@ -43,6 +44,8 @@ scripts/
 results/
   vadd_N1024/o3_nopf/         no-prefetch O3 结果
   vadd_N1024/o3_stridepf/     stride-prefetch O3 结果
+  vadd_N16384/o3_nopf/        更大规模 no-prefetch O3 结果
+  vadd_N16384/o3_stridepf/    更大规模 stride-prefetch O3 结果
   summary.csv                 stats 汇总表
 ```
 
@@ -52,11 +55,11 @@ results/
 | --- | --- | --- |
 | 1. 环境检查 | 已完成 | 见 `notes/env_check.md` |
 | 2. 最小 vadd benchmark | 已完成 | 源码在 `benchmarks/vadd/vadd.c` |
-| 3. RISC-V 编译脚本 | 已完成 | 生成 `build/vadd_N1024.riscv` |
-| 4. gem5 O3 no-prefetch run | 已完成 | `vadd_N1024/o3_nopf` 已跑通 |
+| 3. RISC-V 编译脚本 | 已完成 | 生成 `build/vadd_N1024.riscv`、`build/vadd_N16384.riscv` |
+| 4. gem5 O3 no-prefetch run | 已完成 | `vadd_N1024`、`vadd_N16384` 已跑通 |
 | 5. BOOM 公开配置调研 | 已完成 | 见 `notes/boom_config_survey.md` 和 `notes/boom_survey_cn.md` |
 | 6. BOOM-like O3 配置 | 已完成 | Medium-like O3 profile 已实现并验证 |
-| 7. stride-prefetch baseline | 已完成 | `vadd_N1024/o3_stridepf` 已跑通 |
+| 7. stride-prefetch baseline | 已完成 | `vadd_N1024`、`vadd_N16384` 已跑通 |
 | 8. stats 整理脚本 | 已完成 | `scripts/parse_stats.py` 生成 `results/summary.csv` |
 
 ## 环境准备
@@ -169,22 +172,28 @@ It is not a cycle-accurate reproduction of BOOM.
 
 ## 当前结果摘要
 
-当前 `vadd_N1024` 的核心结果如下：
+当前 `vadd` 的核心结果如下：
 
-| 指标 | `o3_nopf` | `o3_stridepf` |
-| --- | ---: | ---: |
-| instructions | 139167 | 139167 |
-| cycles | 210900 | 153872 |
-| IPC | 0.659872 | 0.904434 |
-| CPI | 1.515445 | 1.105664 |
-| L1D misses | 10655 | 5049 |
-| L1D miss rate | 0.369914 | 0.169435 |
+| benchmark | config | instructions | cycles | IPC | L1D misses |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `vadd_N1024` | `o3_nopf` | 139167 | 210900 | 0.659872 | 10655 |
+| `vadd_N1024` | `o3_stridepf` | 139167 | 153872 | 0.904434 | 5049 |
+| `vadd_N16384` | `o3_nopf` | 502123 | 508314 | 0.987821 | 94132 |
+| `vadd_N16384` | `o3_stridepf` | 502123 | 352590 | 1.424099 | 34050 |
 
-相对 `o3_nopf`，`o3_stridepf` 在这个小 kernel 上：
+相对 `o3_nopf`，`o3_stridepf` 在 `vadd_N1024` 上：
 
 - cycle 数减少约 27.0%；
 - IPC 提高约 37.1%；
 - L1D miss 数减少约 52.6%。
+
+在 `vadd_N16384` 上：
+
+- cycle 数减少约 30.6%；
+- IPC 提高约 44.2%；
+- L1D miss 数减少约 63.8%。
+
+规模放大后 IPC 明显提高，说明 `N=1024` 的 IPC 偏低部分来自 benchmark 太小、固定启动开销和冷态影响占比较大。
 
 更完整的解释见：
 
