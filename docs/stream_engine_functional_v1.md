@@ -121,10 +121,11 @@ results/stream_vadd_N1024/o3_stream_axi_functional/
 
 ## 下一步建议
 
-下一步可以优先做：
+下一步需要精确一下时序和功能验证
 
+- 允许 ste 指令乱序执行，同时增加 arch、spech两套索引表支持错误路径恢复
+- 设计 timing AXI 版本的接口边界；真实的对外 burst 请求
 - 增加更小的 directed tests，分别覆盖每类 CFG 指令；
 - 增加 `ssr_add` 的软件用例；
 - 把 stream-engine 统计加入 `scripts/parse_stats.py`；
-- 设计 timing AXI 版本的接口边界；
 - 讨论是否需要在提交点或 checker 路径上做 stream 指令 difftest。
