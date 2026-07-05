@@ -8,6 +8,12 @@ logs/
 __pycache__/
 *.py[cod]
 
+# Local IDE / Scala language-server metadata.
+.bsp/
+.metals/
+.scala-build/
+.vscode/
+
 # gem5-generated visualizations and citation files can be regenerated.
 results/**/config.dot
 results/**/config.dot.pdf
