@@ -7,13 +7,15 @@
 ## 当前状态
 
 - 最小 benchmark：`benchmarks/vadd/vadd.c`
+- 新增矩阵乘内积 benchmark：`benchmarks/matmul_inner/matmul_inner.c`
 - 默认 sanity-check 规模：`N = 1024`
 - 已补充规模：`N = 16384`
-- RISC-V binary：`build/vadd_N1024.riscv`、`build/vadd_N16384.riscv`
+- RISC-V binary：`build/vadd_N1024.riscv`、`build/vadd_N16384.riscv`、`build/matmul_inner_M32_N32_K32.riscv`
 - gem5 binary：`tools/gem5/build/RISCV/gem5.opt`
 - BOOM-like O3 配置：`gem5_configs/riscv_o3_baseline.py`
 - BOOM-like profile：`gem5_configs/boom_like_profiles.py`
 - gem5 运行包装脚本：`scripts/run_gem5.py`
+- gem5 批量运行脚本：`scripts/run_batch.py`
 - stats 解析脚本：`scripts/parse_stats.py`
 - 已完成结果：`vadd_N1024` 和 `vadd_N16384` 的 `o3_nopf` / `o3_stridepf`
 - 新增 Pf-Stride 对照：`o3_stridepf_d8`、`o3_stridepf_l1d_l2_l3_d8`
@@ -24,8 +26,10 @@
 ```text
 benchmarks/
   vadd/vadd.c                 最小 vector-add benchmark
+  matmul_inner/matmul_inner.c 可配置 M/N/K 的矩阵乘内积 benchmark
 build/
   vadd_N*.riscv               静态链接 RISC-V benchmark binary
+  matmul_inner_M*_N*_K*.riscv 静态链接 RISC-V matmul binary
 gem5_configs/
   boom_like_profiles.py       BOOM-like O3 profile 参数
   riscv_o3_baseline.py        gem5 SE-mode O3 system config
@@ -46,6 +50,7 @@ scripts/
   monitor_gem5_build.sh       gem5 构建进度一次性检查脚本
   parse_stats.py              gem5 stats-to-CSV 解析脚本
   run_gem5.py                 gem5 运行包装脚本
+  run_batch.py                benchmark/config 批量运行脚本
 results/
   vadd_N1024/o3_nopf/         no-prefetch O3 结果
   vadd_N1024/o3_stridepf/     stride-prefetch O3 结果
@@ -55,6 +60,7 @@ results/
                                 L1D-only stride prefetch, degree=8
   vadd_N16384/o3_stridepf_l1d_l2_l3_d8/
                                 L1D/L2/L3 stride prefetch, degree=8
+  matmul_inner_M32_N32_K32/    矩阵乘内积四组 config 结果
   summary.csv                 stats 汇总表
 ```
 
@@ -70,6 +76,7 @@ results/
 | 6. BOOM-like O3 配置 | 已完成 | Medium-like O3 profile 已实现并验证 |
 | 7. stride-prefetch baseline | 已完成 | 已跑通 L1D-only degree=4、L1D-only degree=8、L1D/L2/L3 degree=8 |
 | 8. stats 整理脚本 | 已完成 | `scripts/parse_stats.py` 生成 `results/summary.csv`，含 L2/L3 prefetch 字段 |
+| 9. 扩展 matmul benchmark 与 batch runner | 已完成 | `matmul_inner_M32_N32_K32` 已跑通四组 config |
 
 ## 环境准备
 
@@ -85,10 +92,24 @@ sudo ./scripts/bootstrap_host_deps.sh
 ./scripts/build_benchmarks.sh
 ```
 
-可覆盖编译器、优化等级和问题规模：
+默认会编译 `vadd_N1024` 和 `matmul_inner_M32_N32_K32`。可覆盖编译器、
+优化等级和问题规模：
 
 ```bash
 RISCV_GCC=riscv64-linux-gnu-gcc OPT=-O3 N=1024 ./scripts/build_benchmarks.sh
+```
+
+只编译矩阵乘内积 benchmark：
+
+```bash
+BENCHMARK=matmul_inner MATMUL_M=32 MATMUL_N=32 MATMUL_K=32 \
+  ./scripts/build_benchmarks.sh
+```
+
+编译全部当前 benchmark：
+
+```bash
+BENCHMARKS=all ./scripts/build_benchmarks.sh
 ```
 
 ## gem5 构建
@@ -159,6 +180,32 @@ python3 scripts/run_gem5.py \
 该配置默认使用 `paper_pf_stride_like` profile：L1 I/D 为 32KiB 8-way，
 L2 为 256KiB 16-way，L3 为 8MiB 8-way，并在 L1D、L2、L3 都挂
 PC-based `StridePrefetcher`，`degree=8`，`latency=1`。
+
+批量运行默认 benchmark 的全部 config：
+
+```bash
+python3 scripts/run_batch.py
+```
+
+批量运行指定 benchmark 的全部 config：
+
+```bash
+python3 scripts/run_batch.py --benchmark matmul_inner_M32_N32_K32
+```
+
+只跑指定 config：
+
+```bash
+python3 scripts/run_batch.py \
+  --benchmark matmul_inner_M32_N32_K32 \
+  --config o3_nopf,o3_stridepf_d8
+```
+
+查看当前可发现 benchmark 和可用 config：
+
+```bash
+python3 scripts/run_batch.py --list
+```
 
 每次运行会写入：
 
@@ -256,6 +303,23 @@ It is not a cycle-accurate reproduction of BOOM.
 notes/vadd_baseline_results.md
 ```
 
+`matmul_inner_M32_N32_K32` 的第一组结果如下：
+
+| config | instructions | cycles | IPC | L1D miss rate | L1D misses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `o3_nopf` | 741885 | 1087200 | 0.682381 | 0.086827 | 11089 |
+| `o3_stridepf` | 741885 | 1024930 | 0.723840 | 0.034394 | 4408 |
+| `o3_stridepf_d8` | 741885 | 1025120 | 0.723706 | 0.029326 | 3759 |
+| `o3_stridepf_l1d_l2_l3_d8` | 741885 | 1048332 | 0.707681 | 0.025314 | 3245 |
+
+这组结果说明：对 `M=N=K=32` 的小矩阵乘，预取能明显降低 L1D miss，
+但 IPC 提升小于 `vadd`。原因是该 benchmark 有更多整数计算和数据复用，
+瓶颈不完全来自顺序流式 miss。更完整记录见：
+
+```text
+notes/matmul_inner_batch_results.md
+```
+
 ## 重新生成 stats 汇总
 
 ```bash
@@ -304,8 +368,8 @@ results/summary.csv
 建议下一阶段先扩展 benchmark，再考虑 stream-engine 机制：
 
 1. 增加 `saxpy`、`triad` 或 `stencil1d` 等流式 kernel；
-2. 扩展 `scripts/build_benchmarks.sh` 支持多个 benchmark；
-3. 增加批量运行脚本，例如 `scripts/run_baselines.sh`；
+2. 用 `scripts/run_batch.py` 批量跑多个 benchmark/config；
+3. 对 matmul 继续扩展更大规模，例如 `M=N=K=64` 或 blocked matmul；
 4. 继续扩展 `scripts/parse_stats.py` 的派生指标，例如 speedup、cycle reduction、miss reduction；
 5. 在多个 benchmark 上比较 `o3_nopf`、`o3_stridepf`、`o3_stridepf_d8`、`o3_stridepf_l1d_l2_l3_d8` 和后续 stream-engine 方案。
 

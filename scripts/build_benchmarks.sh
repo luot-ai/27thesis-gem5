@@ -7,6 +7,10 @@ BUILD_DIR="${ROOT_DIR}/build"
 RISCV_GCC="${RISCV_GCC:-}"
 OPT="${OPT:--O3}"
 N="${N:-1024}"
+MATMUL_M="${MATMUL_M:-32}"
+MATMUL_N="${MATMUL_N:-32}"
+MATMUL_K="${MATMUL_K:-32}"
+BENCHMARKS="${BENCHMARKS:-${BENCHMARK:-vadd matmul_inner}}"
 
 find_riscv_gcc() {
     if [[ -n "${RISCV_GCC}" ]]; then
@@ -38,9 +42,41 @@ EOF
 CC="$(find_riscv_gcc)"
 mkdir -p "${BUILD_DIR}"
 
-"${CC}" "${OPT}" -static -DN="${N}" \
-    "${ROOT_DIR}/benchmarks/vadd/vadd.c" \
-    -o "${BUILD_DIR}/vadd_N${N}.riscv"
+build_vadd() {
+    "${CC}" "${OPT}" -static -DN="${N}" \
+        "${ROOT_DIR}/benchmarks/vadd/vadd.c" \
+        -o "${BUILD_DIR}/vadd_N${N}.riscv"
 
-echo "built ${BUILD_DIR}/vadd_N${N}.riscv"
+    echo "built ${BUILD_DIR}/vadd_N${N}.riscv"
+}
 
+build_matmul_inner() {
+    "${CC}" "${OPT}" -static \
+        -DM="${MATMUL_M}" \
+        -DN="${MATMUL_N}" \
+        -DK="${MATMUL_K}" \
+        "${ROOT_DIR}/benchmarks/matmul_inner/matmul_inner.c" \
+        -o "${BUILD_DIR}/matmul_inner_M${MATMUL_M}_N${MATMUL_N}_K${MATMUL_K}.riscv"
+
+    echo "built ${BUILD_DIR}/matmul_inner_M${MATMUL_M}_N${MATMUL_N}_K${MATMUL_K}.riscv"
+}
+
+if [[ "${BENCHMARKS}" == "all" ]]; then
+    BENCHMARKS="vadd matmul_inner"
+fi
+
+for benchmark in ${BENCHMARKS//,/ }; do
+    case "${benchmark}" in
+        vadd)
+            build_vadd
+            ;;
+        matmul_inner|matmul|gemm)
+            build_matmul_inner
+            ;;
+        *)
+            echo "error: unknown benchmark '${benchmark}'" >&2
+            echo "available benchmarks: vadd, matmul_inner" >&2
+            exit 1
+            ;;
+    esac
+done
