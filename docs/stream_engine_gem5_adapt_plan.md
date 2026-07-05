@@ -67,6 +67,24 @@ emulation page table 将虚拟地址映射到 gem5 内部物理地址。
 - 第一版可以选择在 stream 指令执行时调用 gem5 的翻译接口，或者先用
   SE-mode process memory 接口实现功能模型。
 
+普通 O3 CPU 的取指和 load/store 请求仍会经过 gem5 的 MMU/TLB 翻译入口。
+在 SE-mode 下，这条路径不会走 Linux 页表和真实 page walk，而是通过
+`RiscvProcess` 的 `EmulationPageTable` 做虚拟地址到 gem5 内部物理地址的
+映射。因此这里的 `RiscvTLB` 更像 SE-mode 的地址适配层，不应直接等同于
+原 RTL 里真的实现了 TLB。
+
+如果目标是模拟“DSP CPU / bare-metal CPU 本身没有 TLB”，不建议优先修改
+O3 的 rename / issue / LSQ 等微架构流水。更合适的处理位置是 MMU / workload
+/ stream adapter 边界：
+
+- 普通 CPU 路径：把 SE-mode 翻译视为仿真装载和地址映射需要的外部机制，
+  不把它计入目标硬件微架构。
+- stream direct AXI 路径：stream 指令仍接收软件虚拟地址，在 StreamEngine
+  adapter 发 memory packet 前做一次 VA->PA，作为 gem5 适配层。
+- 若后续必须让 CPU 也完全按物理地址运行，应考虑 bare-metal / FS `satp=BARE`
+  风格配置，或在 MMU/TLB 层做 identity / physical-address 映射，而不是先改
+  O3 core 内部流水。
+
 具体方案分两步做：
 
 1. **功能跑通阶段**
@@ -373,8 +391,8 @@ Compute 指令共用 `op_id`，其中 `funct7[6:5]` 保留为 0，
 
 | 类别 | `funct3` | `rd` | `rs1` | `rs2` | 语义 |
 | --- | ---: | --- | --- | --- | --- |
-| SSS | `010` | `x0` | `{src1_fifo_id[1:0], src0_fifo_id[1:0]}` | `dst_fifo_id` | stream + stream -> stream |
-| SSR | `111` | `result_reg` | `{src1_fifo_id[1:0], src0_fifo_id[1:0]}` | `x0` | stream + stream -> register |
+| SSR | `110` | `result_reg` | `{src1_fifo_id[1:0], src0_fifo_id[1:0]}` | `x0` | stream + stream -> register |
+| SSS | `111` | `x0` | `{src1_fifo_id[1:0], src0_fifo_id[1:0]}` | `dst_fifo_id` | stream + stream -> stream |
 
 第一版只实现 `op_id = 0x00` 的 ADD：
 
@@ -383,17 +401,13 @@ SSS ADD: dst_fifo <- src0_fifo + src1_fifo
 SSR ADD: rd       <- src0_fifo + src1_fifo
 ```
 
-注意：`docs/指令集文档.md` 第 2 节一级分类表写的是 `SSR=110`、
-`SSS=111`，但第 6/7 节和第 9 节宏定义写的是 `SSS=010`、`SSR=111`。
-当前建议按详细章节和宏定义实现，也就是：
+当前按 `docs/指令集文档.md` 第 2 节一级分类实现：
 
 ```text
 STREAM_F3_CFG = 0x0
-STREAM_F3_SSS = 0x2
-STREAM_F3_SSR = 0x7
+STREAM_F3_SSR = 0x6
+STREAM_F3_SSS = 0x7
 ```
-
-需要后续确认第 2 节表格是否是旧内容。
 
 `codes_lib/software/stream_instr.h` 仍可作为旧版软件接口和语义参考，但不再作为
 最终编码依据。
@@ -540,9 +554,8 @@ StreamEngine -> L2 cache
 
 ## 需要重点确认的问题
 
-1. `docs/指令集文档.md` 第 2 节和第 6/7/9 节的 `SSS` / `SSR`
-   `funct3` 不一致。
-   当前建议按 `SSS=010`、`SSR=111` 实现，需要确认表格是否需要修正。
+1. `docs/指令集文档.md` 已按第 2 节统一 `funct3`：
+   `SSR=110`、`SSS=111`。后续 decoder 按这个版本实现。
 
 2. direct AXI 使用虚拟地址还是物理地址？
    当前建议功能阶段用 `SETranslatingPortProxy`，timing 阶段在 stream engine
@@ -578,13 +591,12 @@ StreamEngine -> L2 cache
 
 ## 建议的下一步
 
-1. 确认 `SSS` / `SSR` 的 `funct3` 冲突，以 v0.6 宏定义为优先候选。
-2. 在项目中新增 `benchmarks/stream_vadd/`，使用 v0.6 header 编译。
-3. 在 gem5 中加入 stream 指令 decode 和功能模型。
-4. 新增 gem5 config：`o3_stream_axi_functional`。
-5. 跑 `stream_vadd` 端到端自检，并输出 stream 事件 trace。
-6. 再实现 timing direct AXI port 和 VA->PA 翻译拆页逻辑。
-7. 新增 gem5 config：`o3_stream_axi_timing`。
-8. 跑 `stream_vadd`，与 `o3_nopf` / `o3_stridepf` / `o3_stridepf_d8` /
+1. 在项目中新增 `benchmarks/stream_vadd/`，使用 v0.6 header 编译。
+2. 在 gem5 中加入 stream 指令 decode 和功能模型。
+3. 新增 gem5 config：`o3_stream_axi_functional`。
+4. 跑 `stream_vadd` 端到端自检，并输出 stream 事件 trace。
+5. 再实现 timing direct AXI port 和 VA->PA 翻译拆页逻辑。
+6. 新增 gem5 config：`o3_stream_axi_timing`。
+7. 跑 `stream_vadd`，与 `o3_nopf` / `o3_stridepf` / `o3_stridepf_d8` /
    `o3_stridepf_l1d_l2_l3_d8` 对比。
-9. 根据结果再决定是否实现内部多级流水和 stream semantic difftest。
+8. 根据结果再决定是否实现内部多级流水和 stream semantic difftest。
