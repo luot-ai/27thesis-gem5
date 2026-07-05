@@ -20,7 +20,8 @@ from boom_like_profiles import get_profile
 
 PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
 STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
-CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS)
+STREAM_CONFIGS = ("o3_stream_axi_functional",)
+CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS, *STREAM_CONFIGS)
 
 
 class L1ICache(Cache):
@@ -125,6 +126,13 @@ def build_system(args):
     system.cpu = RiscvO3CPU(cpu_id=0)
     system.cpu.clk_domain = system.cpu_clk_domain
     apply_o3_profile(system.cpu, profile)
+
+    if args.config in STREAM_CONFIGS:
+        system.stream_engine = StreamEngine(
+            fifo_count=4,
+            compute_latency=3,
+            initiation_interval=1,
+        )
 
     dcache_prefetcher = None
     if args.config in STRIDE_CONFIGS:

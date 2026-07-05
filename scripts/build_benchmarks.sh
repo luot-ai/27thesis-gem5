@@ -61,8 +61,16 @@ build_matmul_inner() {
     echo "built ${BUILD_DIR}/matmul_inner_M${MATMUL_M}_N${MATMUL_N}_K${MATMUL_K}.riscv"
 }
 
+build_stream_vadd() {
+    "${CC}" "${OPT}" -static -DN="${N}" \
+        "${ROOT_DIR}/benchmarks/stream_vadd/stream_vadd.c" \
+        -o "${BUILD_DIR}/stream_vadd_N${N}.riscv"
+
+    echo "built ${BUILD_DIR}/stream_vadd_N${N}.riscv"
+}
+
 if [[ "${BENCHMARKS}" == "all" ]]; then
-    BENCHMARKS="vadd matmul_inner"
+    BENCHMARKS="vadd matmul_inner stream_vadd"
 fi
 
 for benchmark in ${BENCHMARKS//,/ }; do
@@ -73,9 +81,12 @@ for benchmark in ${BENCHMARKS//,/ }; do
         matmul_inner|matmul|gemm)
             build_matmul_inner
             ;;
+        stream_vadd|stream)
+            build_stream_vadd
+            ;;
         *)
             echo "error: unknown benchmark '${benchmark}'" >&2
-            echo "available benchmarks: vadd, matmul_inner" >&2
+            echo "available benchmarks: vadd, matmul_inner, stream_vadd" >&2
             exit 1
             ;;
     esac

@@ -465,6 +465,10 @@ for (int i = 0; i < 512; i++) {
 
 ## gem5 实现入口建议
 
+Step 3/4 的细化方案见：
+
+- `docs/stream_engine_gem5_decode_model_plan.md`
+
 ### ISA decode
 
 gem5 RISC-V 的 decode 入口在：

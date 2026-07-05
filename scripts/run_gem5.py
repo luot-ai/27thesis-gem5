@@ -14,7 +14,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_SCRIPT = ROOT_DIR / "gem5_configs" / "riscv_o3_baseline.py"
 PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
 STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
-CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS)
+STREAM_CONFIGS = ("o3_stream_axi_functional",)
+CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS, *STREAM_CONFIGS)
 
 
 def selected_profile_name(args):
@@ -151,6 +152,7 @@ def build_command(args, outdir: Path):
 
 def write_run_metadata(args, outdir: Path, cmd):
     stride_levels = stride_prefetch_levels(args.config)
+    stream_enabled = args.config in STREAM_CONFIGS
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "dry_run": args.dry_run,
@@ -177,6 +179,10 @@ def write_run_metadata(args, outdir: Path, cmd):
             "degree": effective_stride_degree(args),
             "latency": effective_stride_latency(args),
             "prefetch_on_access": args.stridepf_on_access,
+        },
+        "stream_engine": {
+            "enabled": stream_enabled,
+            "mode": "axi_functional" if stream_enabled else "none",
         },
         "note": (
             "BOOM-like gem5 O3 baseline inspired by public BOOM configs; "
