@@ -94,6 +94,7 @@ def parse_args():
     )
     parser.add_argument("--mem-size", default="512MiB")
     parser.add_argument("--cache-line-size", type=int, default=64)
+    parser.add_argument("--stream-segment-bytes", type=int, default=128)
     parser.add_argument("--sys-clock", default="1GHz")
     parser.add_argument("--cpu-clock", default="2GHz")
     parser.add_argument("--stridepf-degree", type=int, default=4)
@@ -133,6 +134,8 @@ def build_command(args, outdir: Path):
         args.mem_size,
         "--cache-line-size",
         str(args.cache_line_size),
+        "--stream-segment-bytes",
+        str(args.stream_segment_bytes),
         "--sys-clock",
         args.sys_clock,
         "--cpu-clock",
@@ -183,6 +186,9 @@ def write_run_metadata(args, outdir: Path, cmd):
         "stream_engine": {
             "enabled": stream_enabled,
             "mode": "axi_functional" if stream_enabled else "none",
+            "stream_segment_bytes": (
+                args.stream_segment_bytes if stream_enabled else None
+            ),
         },
         "note": (
             "BOOM-like gem5 O3 baseline inspired by public BOOM configs; "

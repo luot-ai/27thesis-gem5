@@ -130,6 +130,7 @@ def build_system(args):
     if args.config in STREAM_CONFIGS:
         system.stream_engine = StreamEngine(
             fifo_count=4,
+            stream_segment_bytes=args.stream_segment_bytes,
             compute_latency=3,
             initiation_interval=1,
         )
@@ -209,6 +210,7 @@ def parse_args():
     parser.add_argument("--profile", default="auto")
     parser.add_argument("--mem-size", default="512MiB")
     parser.add_argument("--cache-line-size", type=int, default=64)
+    parser.add_argument("--stream-segment-bytes", type=int, default=128)
     parser.add_argument("--sys-clock", default="1GHz")
     parser.add_argument("--cpu-clock", default="2GHz")
     parser.add_argument("--sys-voltage", default="1.0V")
