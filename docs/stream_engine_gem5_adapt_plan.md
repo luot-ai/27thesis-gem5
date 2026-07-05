@@ -10,6 +10,7 @@ vector add 的近似 stream-engine model，之后再逐步增加更细的流水�
 ## 已阅读材料
 
 - `docs/流式访存总结文档.md`
+- `docs/指令集文档.md`
 - `codes_lib/software/stream_instr.h`
 - `codes_lib/software/stream-add.c`
 - `codes_lib/rtl/Stream.scala`
@@ -28,13 +29,13 @@ vector add 的近似 stream-engine model，之后再逐步增加更细的流水�
 - 暂不实现 FFT / PP buffer 路径。
 - 暂不实现 CALSTREAM 指令在 CPU dispatch/issue/execute/writeback 流水线里的精确流动。
 - 可以先把 CALSTREAM 建模为 Stream Engine 内部带计算部件的多级流水。
-- 指令编码暂以 `codes_lib/software/stream_instr.h` 为旧版参考，等待新的编码文档后再定稿。
-- `cal_stream` 第一版只支持整数 add，但代码结构要保留后续扩展 sub/mul/rd/PP 的空间。
+- 指令编码以 `docs/指令集文档.md` v0.6 为当前实现依据。
+- compute 指令第一版只支持 SSS ADD，但代码结构要保留后续扩展 sub/mul/SSR/PP 的空间。
 - direct AXI 版本不保证与 CPU cache 自动一致，按编程约束处理。
 
 因此第一版的验收目标是：
 
-1. gem5 能识别 stream 配置指令和 `cal_stream`。
+1. gem5 能识别 stream 配置指令和 `sss_add`。
 2. Stream Engine 内部能保存 descriptor / FIFO / ready 状态。
 3. Stream Engine 能按配置从 memory bus 取 A/B 数据，执行加法，写回 C。
 4. stream 版本 vector add 能在 gem5 SE-mode 下跑通并自检通过。
@@ -66,6 +67,29 @@ emulation page table 将虚拟地址映射到 gem5 内部物理地址。
 - 第一版可以选择在 stream 指令执行时调用 gem5 的翻译接口，或者先用
   SE-mode process memory 接口实现功能模型。
 
+具体方案分两步做：
+
+1. **功能跑通阶段**
+   Stream 指令执行时先使用 `SETranslatingPortProxy` 或 process
+   `EmulationPageTable` 对虚拟地址进行访问。这个路径最容易保证功能正确，
+   也能绕开 direct AXI 与 CPU cache 不一致导致的初始值 / 校验问题。代价是
+   memory traffic 和 stall 不代表真实 AXI 时序。
+
+2. **timing direct AXI 阶段**
+   Stream Engine 作为独立 SimObject，提供一个 `RequestPort` 连接
+   `system.membus`。stream 指令传入的 base address 仍然是虚拟地址，但在
+   发起每个 burst / word 请求前，通过 CPU `ThreadContext` 对应的
+   SE-mode page table 翻译成物理地址，然后用物理地址构造 memory packet。
+   这个模型绕过 CPU 私有 cache，接近“直连 AXI 到 memory bus”的目标。
+
+timing 阶段需要注意 page crossing：一个 stream burst 如果跨 4 KiB page，
+必须拆成多个物理连续的小请求。第一版可以保守地逐 word 翻译；确认功能后再
+优化成“同一 page 内按 cacheline / burst 翻译一次”。
+
+这个 VA->PA 翻译只属于 gem5 SE-mode 适配层，不应写成硬件 RTL 拥有 TLB。
+统计里可以加 `stream.addrTranslations`，但第一版翻译延迟建议先按 0 cycle
+处理，避免把仿真机制误当成硬件机制。
+
 ### Cache 一致性
 
 第一版 direct AXI / memory-bus Stream Engine 不保证自动 cache 一致性。
@@ -86,7 +110,16 @@ stream 写回后又由 CPU 从 stale cacheline 读取。
 - 如果短期内难以精确模拟这套编程约束，可以先用 functional memory path
   跑通语义，再逐步替换为 timing memory port。
 
-### `cal_stream` 算子
+短期建议：
+
+- `stream_vadd` bring-up 使用功能路径完成端到端自检。
+- timing AXI 性能实验先要求 stream 数据区不被 CPU 普通 load/store 访问；
+  如果 benchmark 必须由 CPU 初始化 / 校验，则先增加显式 flush / invalidate
+  或使用无私有 cache 的 stream 专用配置进行对照。
+- 在文档和实验说明中明确：direct AXI stream 对象需要由软件保证生命周期内
+  不与 CPU cache 产生隐式一致性依赖。
+
+### SSS ADD 算子
 
 第一版只实现：
 
@@ -96,9 +129,9 @@ dst = src0 + src1
 
 但实现时要把 opcode/funct 或算子类型抽象出来，后续可以扩展：
 
-- `cal_stream_rd_add`
-- `cal_stream_rd_sub`
-- `cal_stream_rd_mul`
+- `ssr_add`
+- `ssr_sub`
+- `ssr_mul`
 - PP 写回类指令
 
 ### `cfg_i(length)` 单位
@@ -117,7 +150,7 @@ lengthMap = cfgLength / l2LineWord
 旧 `stream-add.c` 中没有显式 wait/drain 指令。第一版 gem5 如果要在同一个
 benchmark 内校验 C 数组，需要提供一种完成语义：
 
-- 功能模型阶段可以让 `cal_stream` 或 stream engine 语义同步完成，保证循环后 C 已写回；
+- 功能模型阶段可以让 `sss_add` 或 stream engine 语义同步完成，保证循环后 C 已写回；
 - timing 模型阶段建议新增或保留一个可选 wait/drain 机制，或者在 benchmark
   侧显式等待 stream store 队列清空。
 
@@ -207,9 +240,10 @@ RTL store 路径的核心语义：
 
 第一版 vector add 只需要 fifo 2 作为 store stream。
 
-### CALSTREAM 计算
+### CALSTREAM / SSS 计算
 
-`cal_stream(src0, src1, dst)` 当前 vector add 示例中表示：
+`cal_stream(src0, src1, dst)` 的旧软件接口在 v0.6 指令集中对应 `sss_add`，
+当前 vector add 示例中表示：
 
 ```text
 dst[i] = src0[i] + src1[i]
@@ -224,7 +258,7 @@ dst[i] = src0[i] + src1[i]
 5. 写入 FIFO[dst][idx2]。
 6. load ready 递减，store ready 置位。
 
-第一版可以先只支持 add。`cal_stream_rd_add/sub/mul` 和 PP 类指令后续再做。
+第一版可以先只支持 SSS ADD。SSR ADD、更多 `op_id` 和 PP 类指令后续再做。
 
 ## 指令级 Difftest 评估
 
@@ -237,7 +271,7 @@ stream 语义事件日志，后续可以升级成 difftest。
 
 原因：
 
-- `cal_stream` 不一定写通用寄存器，传统“寄存器写回值 difftest”不够用。
+- SSS 指令不写通用寄存器，传统“寄存器写回值 difftest”不够用。
 - O3 会有推测执行、squash、重放；如果在 execute 阶段修改 Stream Engine，
   difftest 必须处理恢复问题。
 - 如果第一版将 stream side effect 放到 commit 语义上，功能会更容易对齐，
@@ -245,20 +279,20 @@ stream 语义事件日志，后续可以升级成 difftest。
 - golden 的来源尚未确定；直接做每条指令级 difftest 会先卡在 golden
   模型定义上。
 
-建议分三阶段：
+建议分四阶段：
 
 1. **端到端校验**
    先让 `stream_vadd` 最终输出数组与普通 C golden 相同。这是第一版必须做的。
 
 2. **stream 事件级 trace**
-   在 gem5 中记录每条 stream 指令的语义事件：
+   在 gem5 中记录每条已提交 stream 指令的语义事件：
 
    ```text
    commit_sn / pc / opcode
    cfg 写入了哪个 descriptor 字段
-   cal_stream 使用的 src fifo / dst fifo / index
-   cal_stream 读到的 src0/src1 值
-   cal_stream 产生的 dst 值
+   sss_add 使用的 src fifo / dst fifo / index
+   sss_add 读到的 src0/src1 值
+   sss_add 产生的 dst 值
    stream load/store 写 memory 的地址和值
    ```
 
@@ -277,29 +311,92 @@ stream 语义事件日志，后续可以升级成 difftest。
 
    这比“每条 O3 指令寄存器写回 difftest”更适合 stream engine。
 
+4. **可选 O3 commit 级检查**
+   如果后续要验证 stream 指令和 O3 推测执行的精确交互，再把检查挂到 O3
+   commit 路径。普通 RISC-V 指令不需要重复 difftest；重点检查 stream custom
+   指令的 architectural side effect：
+
+   ```text
+   CFG: descriptor 更新
+   SSS: FIFO / store stream 写入
+   SSR: rd 写回值
+   load/store stream: memory 地址和值
+   squash: 推测 side effect 是否被取消
+   ```
+
+第一版建议让 stream side effect 发生在 commit 语义之后，或者只在 commit
+后变成 architectural state。这样最容易避免 O3 execute 阶段推测修改 FIFO
+后又被 squash 的恢复问题。等功能稳定后，如果要更接近 RTL 的 `specI` /
+`archI`，再引入 execute-time 推测态、commit 提交和 squash rollback。
+
 结论：第一版先做端到端校验 + 可选事件 trace；等新编码和功能模型稳定后，
 再做 stream semantic difftest。
 
-## 旧版指令编码参考
+## 新版指令编码 v0.6
 
-当前 `stream_instr.h` 使用 R-type `.insn r 0x0b, funct3, funct7, rd, rs1, rs2`。
-用户说明后续编码已经修改，因此下表只作为旧版语义参考，不作为最终实现依据。
+当前实现以 `docs/指令集文档.md` v0.6 为准。所有 stream 指令仍使用
+RISC-V R-type custom-0：
 
-| 指令 | 旧 opcode | 旧 funct3 | 旧 funct7 | rd | rs1 | rs2 | 语义 |
-| --- | --- | ---: | ---: | --- | --- | --- | --- |
-| `cfg_i` | `0x0b` | 0 | 0 | x0 | `(outerIter & 0xffff) | (length << 16)` | fifo_id | 配置 outerIter / length |
-| `cfg_i_limit` | `0x0b` | 0 | 1 | x0 | limit | fifo_id | 配置 iLimit |
-| `cfg_i_repeat` | `0x0b` | 0 | 2 | x0 | repeat | fifo_id | 配置 iRepeat |
-| `cfg_store` | `0x0b` | 1 | 0 | x0 | addr | fifo_id | 配置 store stream |
-| `cal_stream` | `0x0b` | 2 | 0 | x0 | src0/src1 packed | dst fifo_id | 流流流，结果写 store stream |
-| `cfg_stride` | `0x0b` | 3 | 0 | x0 | stride | fifo_id | 配置 word stride |
-| `cfg_tilestride` | `0x0b` | 3 | 1 | x0 | tileStride | fifo_id | 配置 tile stride |
-| `cfg_reuse` | `0x0b` | 4 | 0 | x0 | reuse | fifo_id | 配置 load 元素消费次数 |
-| `cfg_load` | `0x0b` | 5 | 0 | x0 | addr | fifo_id | 配置 L2/cache load stream |
-| `cfg_axi_load` | `0x0b` | 5 | 1 | x0 | addr | fifo_id | 配置 AXI load stream |
-| `cal_stream_rd_add` | `0x0b` | 7 | 0 | rd | src0/src1 packed | x0 | 流流寄，加法结果写 rd |
-| `cal_stream_rd_sub` | `0x0b` | 7 | 8 | rd | src0/src1 packed | x0 | 流流寄，减法结果写 rd |
-| `cal_stream_rd_mul` | `0x0b` | 7 | 16 | rd | src0/src1 packed | x0 | 流流寄，乘法结果写 rd |
+```asm
+.insn r 0x0b, funct3, funct7, rd, rs1, rs2
+```
+
+### CFG
+
+CFG 统一使用：
+
+```text
+opcode = 0x0b
+funct3 = 000
+funct7 = cfg_id
+rd     = x0
+rs1    = cfg_value
+rs2    = fifo_id
+```
+
+| `cfg_id` / `funct7` | 指令 | `rs1` | `rs2` | 语义 |
+| ---: | --- | --- | --- | --- |
+| 0 | `cfg_iter` | `{length[15:0], outerIter[15:0]}` | `fifo_id` | 配置 block 数和 block 内 word 数 |
+| 1 | `cfg_i_limit` | `limit` | `fifo_id` | 配置索引推进上限 |
+| 2 | `cfg_i_repeat` | `repeat` | `fifo_id` | 配置局部重复次数 |
+| 3 | `cfg_stride` | `stride` | `fifo_id` | 配置 word stride |
+| 4 | `cfg_tilestride` | `tilestride` | `fifo_id` | 配置 tile stride |
+| 5 | `cfg_reuse` | `reuse` | `fifo_id` | 配置每个 word 的复用次数 |
+| 6 | `cfg_load` / `cfg_L2_load` | `base_addr` | `fifo_id` | 配置 L2/cache load stream |
+| 7 | `cfg_axi_load` | `base_addr` | `fifo_id` | 配置 AXI load stream |
+| 8 | `cfg_store` | `base_addr` | `fifo_id` | 配置 store stream |
+
+### SSS / SSR
+
+Compute 指令共用 `op_id`，其中 `funct7[6:5]` 保留为 0，
+`funct7[4:0] = op_id`。
+
+| 类别 | `funct3` | `rd` | `rs1` | `rs2` | 语义 |
+| --- | ---: | --- | --- | --- | --- |
+| SSS | `010` | `x0` | `{src1_fifo_id[1:0], src0_fifo_id[1:0]}` | `dst_fifo_id` | stream + stream -> stream |
+| SSR | `111` | `result_reg` | `{src1_fifo_id[1:0], src0_fifo_id[1:0]}` | `x0` | stream + stream -> register |
+
+第一版只实现 `op_id = 0x00` 的 ADD：
+
+```text
+SSS ADD: dst_fifo <- src0_fifo + src1_fifo
+SSR ADD: rd       <- src0_fifo + src1_fifo
+```
+
+注意：`docs/指令集文档.md` 第 2 节一级分类表写的是 `SSR=110`、
+`SSS=111`，但第 6/7 节和第 9 节宏定义写的是 `SSS=010`、`SSR=111`。
+当前建议按详细章节和宏定义实现，也就是：
+
+```text
+STREAM_F3_CFG = 0x0
+STREAM_F3_SSS = 0x2
+STREAM_F3_SSR = 0x7
+```
+
+需要后续确认第 2 节表格是否是旧内容。
+
+`codes_lib/software/stream_instr.h` 仍可作为旧版软件接口和语义参考，但不再作为
+最终编码依据。
 
 第一版建议只实现：
 
@@ -311,9 +408,10 @@ stream 语义事件日志，后续可以升级成 difftest。
 - `cfg_tilestride`
 - `cfg_axi_load`
 - `cfg_store`
-- `cal_stream`
+- `sss_add`
 
 `cfg_load` 可先不支持，或暂时视为 `cfg_axi_load` 的别名，但需要用户确认。
+`SSR ADD` 可作为第二个小目标实现，方便之后做 stream -> register 的结果检查。
 
 ## Vector Add 适配目标
 
@@ -340,14 +438,14 @@ cfg_axi_load((uint32_t)b, 1);
 cfg_store((uint32_t)c, 2);
 
 for (int i = 0; i < 512; i++) {
-    cal_stream(0, 1, 2);
+    sss_add(0, 1, 2);
 }
 ```
 
 第一版 benchmark 可以整理成项目内可编译的 `stream_vadd`：
 
 - 使用当前 `benchmarks/vadd/vadd.c` 的初始化和校验风格。
-- 将普通 `y[i] = a[i] + b[i]` 替换成 stream 配置加 `cal_stream` 循环。
+- 将普通 `y[i] = a[i] + b[i]` 替换成 stream 配置加 `sss_add` 循环。
 - `N` 默认可以先设为 512 或 1024。
 - 如果 direct AXI 绕过 cache 导致普通 CPU 校验读到旧数据，需要先解决一致性问题。
 
@@ -363,8 +461,9 @@ gem5 RISC-V 的 decode 入口在：
 - `tools/gem5/src/arch/riscv/insts/*.hh`
 - `tools/gem5/src/arch/riscv/insts/*.cc`
 
-等你给新的编码文档后，应先在 `decoder.isa` 中添加 custom stream opcode 分支，
-再补对应 instruction class。
+应先在 `decoder.isa` 中添加 custom stream opcode 分支，再补对应
+instruction class。当前先按 `docs/指令集文档.md` 的 v0.6 详细章节 /
+宏定义实现 `CFG`、`SSS ADD`，后续再扩展更多 `op_id`。
 
 ### Stream Engine model
 
@@ -441,13 +540,13 @@ StreamEngine -> L2 cache
 
 ## 需要重点确认的问题
 
-1. 新指令编码是什么？
-   旧 `stream_instr.h` 只作参考。需要新的 opcode / funct3 / funct7 / rd / rs1 / rs2 定义。
+1. `docs/指令集文档.md` 第 2 节和第 6/7/9 节的 `SSS` / `SSR`
+   `funct3` 不一致。
+   当前建议按 `SSS=010`、`SSR=111` 实现，需要确认表格是否需要修正。
 
 2. direct AXI 使用虚拟地址还是物理地址？
-   原 RTL 没有 TLB，但 gem5 SE-mode 有 emulation page table。第一版实现时
-   需要决定是在 stream 指令处翻译 VA->PA，还是先用 SE process memory
-   接口做功能模型。
+   当前建议功能阶段用 `SETranslatingPortProxy`，timing 阶段在 stream engine
+   发请求前做 VA->PA 翻译，再用物理地址访问 `system.membus`。
 
 3. direct AXI 对象的编程约束如何在 benchmark 中表达？
    需要一个明确的 stream_vadd 写法，避免输入/输出数组被 CPU cache 路径污染。
@@ -464,24 +563,28 @@ StreamEngine -> L2 cache
 7. 是否需要保留 `cfg_load`？
    第一版只做 AXI，因此可以只支持 `cfg_axi_load`。如果软件仍会发 `cfg_load`，需要决定是否把它当成 AXI load。
 
-8. 是否要在第一版里实现 `cal_stream_rd_*`？
-    vector add 不需要，matmul inner-product 后续可能需要 `cal_stream_rd_mul` 或乘加组合。建议第一版先不做。
+8. 是否要在第一版里实现 `SSR ADD`？
+    vector add 不需要，matmul inner-product 后续可能需要 stream -> register
+    的写回结果。建议第一版先做 `SSS ADD`，`SSR ADD` 作为第二个小目标。
 
 9. stream 指令是否需要 memory fence 语义？
-    配置指令、load stream、store stream 与普通 CPU load/store 的顺序关系需要定义。第一版可以在软件侧插入明确的等待/完成指令，但当前旧指令集中没有看到 wait/fence。
+    配置指令、load stream、store stream 与普通 CPU load/store 的顺序关系需要定义。第一版可以在软件侧插入明确的等待/完成指令，但当前 v0.6 指令集中没有看到 wait/fence。
 
 10. stream kernel 如何知道所有 store 已写回完成？
-    `stream-add.c` 中循环后没有显式 wait。RTL 可能依赖程序结束前自然 drain。gem5 benchmark 若要校验 C，需要一个可等待 stream 完成的机制，或者让 `cal_stream` / `cfg_store` 模型同步完成。
+    `stream-add.c` 中循环后没有显式 wait。RTL 可能依赖程序结束前自然 drain。gem5 benchmark 若要校验 C，需要一个可等待 stream 完成的机制，或者让 `sss_add` / `cfg_store` 模型同步完成。
 
 11. 是否要把 stream semantic difftest 作为第二阶段目标？
-    第一版建议只预留事件 trace；是否后续正式引入 golden interpreter 需要确认。
+    第一版建议只预留事件 trace；功能稳定后再引入 golden interpreter。
 
 ## 建议的下一步
 
-1. 用户提供新的指令编码文档。
-2. 明确第一版地址/一致性策略。
-3. 在项目中新增 `benchmarks/stream_vadd/`，使用新 header 编译。
-4. 在 gem5 中先加入 stream 指令 decode 和功能模型。
-5. 新增 gem5 config：`o3_stream_axi`。
-6. 跑 `stream_vadd`，与 `o3_nopf` / `o3_stridepf` / `o3_stridepf_d8` / `o3_stridepf_l1d_l2_l3_d8` 对比。
-7. 根据结果再决定是否实现 timing memory port 和内部多级流水。
+1. 确认 `SSS` / `SSR` 的 `funct3` 冲突，以 v0.6 宏定义为优先候选。
+2. 在项目中新增 `benchmarks/stream_vadd/`，使用 v0.6 header 编译。
+3. 在 gem5 中加入 stream 指令 decode 和功能模型。
+4. 新增 gem5 config：`o3_stream_axi_functional`。
+5. 跑 `stream_vadd` 端到端自检，并输出 stream 事件 trace。
+6. 再实现 timing direct AXI port 和 VA->PA 翻译拆页逻辑。
+7. 新增 gem5 config：`o3_stream_axi_timing`。
+8. 跑 `stream_vadd`，与 `o3_nopf` / `o3_stridepf` / `o3_stridepf_d8` /
+   `o3_stridepf_l1d_l2_l3_d8` 对比。
+9. 根据结果再决定是否实现内部多级流水和 stream semantic difftest。
