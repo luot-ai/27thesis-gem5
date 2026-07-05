@@ -12,6 +12,37 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_SCRIPT = ROOT_DIR / "gem5_configs" / "riscv_o3_baseline.py"
+PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
+STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
+CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS)
+
+
+def selected_profile_name(args):
+    if args.profile == "auto":
+        if args.config == PAPER_STRIDE_CONFIG:
+            return "paper_pf_stride_like"
+        return "medium_boom_like"
+    return args.profile
+
+
+def effective_stride_degree(args):
+    if args.config in ("o3_stridepf_d8", PAPER_STRIDE_CONFIG):
+        return 8
+    return args.stridepf_degree
+
+
+def effective_stride_latency(args):
+    if args.config in ("o3_stridepf_d8", PAPER_STRIDE_CONFIG):
+        return 1
+    return args.stridepf_latency
+
+
+def stride_prefetch_levels(config):
+    if config == PAPER_STRIDE_CONFIG:
+        return ["l1d", "l2", "l3"]
+    if config in ("o3_stridepf", "o3_stridepf_d8"):
+        return ["l1d"]
+    return []
 
 
 def parse_args():
@@ -29,13 +60,13 @@ def parse_args():
     )
     parser.add_argument(
         "--config",
-        choices=("o3_nopf", "o3_stridepf"),
+        choices=CONFIG_CHOICES,
         default="o3_nopf",
         help="Baseline config to pass to the gem5 config script",
     )
     parser.add_argument(
         "--profile",
-        default="medium_boom_like",
+        default="auto",
         help="BOOM-like profile name",
     )
     parser.add_argument(
@@ -84,6 +115,7 @@ def build_command(args, outdir: Path):
     gem5_bin = Path(args.gem5_bin).resolve()
     benchmark = Path(args.benchmark).resolve()
     config_script = Path(args.config_script).resolve()
+    profile_name = selected_profile_name(args)
 
     cmd = [
         str(gem5_bin),
@@ -95,7 +127,7 @@ def build_command(args, outdir: Path):
         "--config",
         args.config,
         "--profile",
-        args.profile,
+        profile_name,
         "--mem-size",
         args.mem_size,
         "--cache-line-size",
@@ -105,9 +137,9 @@ def build_command(args, outdir: Path):
         "--cpu-clock",
         args.cpu_clock,
         "--stridepf-degree",
-        str(args.stridepf_degree),
+        str(effective_stride_degree(args)),
         "--stridepf-latency",
-        str(args.stridepf_latency),
+        str(effective_stride_latency(args)),
     ]
     if args.stridepf_on_access:
         cmd.append("--stridepf-on-access")
@@ -117,12 +149,15 @@ def build_command(args, outdir: Path):
     return cmd
 
 
-def write_config_json(args, outdir: Path, cmd):
+def write_run_metadata(args, outdir: Path, cmd):
+    stride_levels = stride_prefetch_levels(args.config)
     payload = {
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "dry_run": args.dry_run,
         "bench_name": args.bench_name,
         "config": args.config,
-        "profile": args.profile,
+        "requested_profile": args.profile,
+        "profile": selected_profile_name(args),
         "gem5_bin": str(Path(args.gem5_bin).resolve()),
         "benchmark": str(Path(args.benchmark).resolve()),
         "config_script": str(Path(args.config_script).resolve()),
@@ -137,9 +172,10 @@ def write_config_json(args, outdir: Path, cmd):
             "cpu_clock": args.cpu_clock,
         },
         "stride_prefetcher": {
-            "enabled": args.config == "o3_stridepf",
-            "degree": args.stridepf_degree,
-            "latency": args.stridepf_latency,
+            "enabled": bool(stride_levels),
+            "levels": stride_levels,
+            "degree": effective_stride_degree(args),
+            "latency": effective_stride_latency(args),
             "prefetch_on_access": args.stridepf_on_access,
         },
         "note": (
@@ -147,7 +183,7 @@ def write_config_json(args, outdir: Path, cmd):
             "not a cycle-accurate BOOM reproduction."
         ),
     }
-    with (outdir / "config.json").open("w", encoding="utf-8") as f:
+    with (outdir / "run_metadata.json").open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
         f.write("\n")
 
@@ -169,11 +205,11 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
 
     cmd = build_command(args, outdir)
-    write_config_json(args, outdir, cmd)
+    write_run_metadata(args, outdir, cmd)
 
     print(" ".join(cmd))
     if args.dry_run:
-        print(f"dry run: wrote {outdir / 'config.json'}")
+        print(f"dry run: wrote {outdir / 'run_metadata.json'}")
         return 0
 
     with (outdir / "simout").open("w", encoding="utf-8") as stdout, (

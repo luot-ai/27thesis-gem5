@@ -16,6 +16,7 @@
 - gem5 运行包装脚本：`scripts/run_gem5.py`
 - stats 解析脚本：`scripts/parse_stats.py`
 - 已完成结果：`vadd_N1024` 和 `vadd_N16384` 的 `o3_nopf` / `o3_stridepf`
+- 新增 Pf-Stride 对照：`o3_stridepf_d8`、`o3_stridepf_l1d_l2_l3_d8`
 - 汇总表格：`results/summary.csv`
 
 ## 项目结构
@@ -50,6 +51,10 @@ results/
   vadd_N1024/o3_stridepf/     stride-prefetch O3 结果
   vadd_N16384/o3_nopf/        更大规模 no-prefetch O3 结果
   vadd_N16384/o3_stridepf/    更大规模 stride-prefetch O3 结果
+  vadd_N16384/o3_stridepf_d8/
+                                L1D-only stride prefetch, degree=8
+  vadd_N16384/o3_stridepf_l1d_l2_l3_d8/
+                                L1D/L2/L3 stride prefetch, degree=8
   summary.csv                 stats 汇总表
 ```
 
@@ -63,8 +68,8 @@ results/
 | 4. gem5 O3 no-prefetch run | 已完成 | `vadd_N1024`、`vadd_N16384` 已跑通 |
 | 5. BOOM 公开配置调研 | 已完成 | 见 `notes/boom_config_survey.md` 和 `notes/boom_survey_cn.md` |
 | 6. BOOM-like O3 配置 | 已完成 | Medium-like O3 profile 已实现并验证 |
-| 7. stride-prefetch baseline | 已完成 | `vadd_N1024`、`vadd_N16384` 已跑通 |
-| 8. stats 整理脚本 | 已完成 | `scripts/parse_stats.py` 生成 `results/summary.csv` |
+| 7. stride-prefetch baseline | 已完成 | 已跑通 L1D-only degree=4、L1D-only degree=8、L1D/L2/L3 degree=8 |
+| 8. stats 整理脚本 | 已完成 | `scripts/parse_stats.py` 生成 `results/summary.csv`，含 L2/L3 prefetch 字段 |
 
 ## 环境准备
 
@@ -131,10 +136,35 @@ python3 scripts/run_gem5.py \
   --config o3_stridepf
 ```
 
+运行 Pf-Stride degree=8 的 L1D-only 对照：
+
+```bash
+python3 scripts/run_gem5.py \
+  --gem5-bin tools/gem5/build/RISCV/gem5.opt \
+  --benchmark build/vadd_N16384.riscv \
+  --bench-name vadd_N16384 \
+  --config o3_stridepf_d8
+```
+
+运行更接近论文 Pf-Stride 对照组的三层预取/缓存层次：
+
+```bash
+python3 scripts/run_gem5.py \
+  --gem5-bin tools/gem5/build/RISCV/gem5.opt \
+  --benchmark build/vadd_N16384.riscv \
+  --bench-name vadd_N16384 \
+  --config o3_stridepf_l1d_l2_l3_d8
+```
+
+该配置默认使用 `paper_pf_stride_like` profile：L1 I/D 为 32KiB 8-way，
+L2 为 256KiB 16-way，L3 为 8MiB 8-way，并在 L1D、L2、L3 都挂
+PC-based `StridePrefetcher`，`degree=8`，`latency=1`。
+
 每次运行会写入：
 
 ```text
 results/<bench-name>/<config>/
+  run_metadata.json
   config.json
   config.ini
   simout
@@ -142,7 +172,10 @@ results/<bench-name>/<config>/
   stats.txt
 ```
 
-`config.json` 记录运行命令、benchmark、profile、cache/clock 设置和是否启用 stride prefetcher。即使运行失败，也应保留 `simout`、`simerr` 和 `config.json` 用于诊断。
+`run_metadata.json` 记录 wrapper 命令、benchmark、profile、cache/clock
+设置和 stride-prefetcher 选项。`config.ini` / `config.json` 是 gem5 生成的
+完整配置快照。即使运行失败，也应保留 `simout`、`simerr`、metadata 和
+gem5 配置文件用于诊断。
 
 ## BOOM-like O3 配置说明
 
@@ -184,6 +217,8 @@ It is not a cycle-accurate reproduction of BOOM.
 | `vadd_N1024` | `o3_stridepf` | 139167 | 153872 | 0.904434 | 5049 |
 | `vadd_N16384` | `o3_nopf` | 502123 | 508314 | 0.987821 | 94132 |
 | `vadd_N16384` | `o3_stridepf` | 502123 | 352590 | 1.424099 | 34050 |
+| `vadd_N16384` | `o3_stridepf_d8` | 502123 | 312786 | 1.605324 | 22845 |
+| `vadd_N16384` | `o3_stridepf_l1d_l2_l3_d8` | 502123 | 336766 | 1.491015 | 11074 |
 
 相对 `o3_nopf`，`o3_stridepf` 在 `vadd_N1024` 上：
 
@@ -196,6 +231,22 @@ It is not a cycle-accurate reproduction of BOOM.
 - cycle 数减少约 30.6%；
 - IPC 提高约 44.2%；
 - L1D miss 数减少约 63.8%。
+
+新增的 `o3_stridepf_d8` 在 `vadd_N16384` 上相对 no-prefetch：
+
+- cycle 数减少约 38.5%；
+- IPC 提高约 62.5%；
+- L1D miss 数减少约 75.7%。
+
+新增的 `o3_stridepf_l1d_l2_l3_d8` 在 `vadd_N16384` 上相对 no-prefetch：
+
+- cycle 数减少约 33.7%；
+- IPC 提高约 50.9%；
+- L1D miss 数减少约 88.2%。
+
+注意：三层 Pf-Stride 配置的 L1D miss 更少，但当前 `vadd_N16384` 上 IPC
+低于 L1D-only degree=8 配置。这说明多级预取和更深缓存层次会改变访问路径
+与预取流量，不能只看 L1D miss 判断最终收益。
 
 规模放大后 IPC 明显提高，说明 `N=1024` 的 IPC 偏低部分来自 benchmark 太小、固定启动开销和冷态影响占比较大。
 
@@ -220,8 +271,8 @@ results/summary.csv
 当前 parser 会提取：
 
 - instruction / tick / cycle / IPC / CPI；
-- L1D、L1I、L2 miss 指标；
-- stride-prefetch 的 `pfIssued`、`pfUseful`、`accuracy`、`coverage` 等指标。
+- L1D、L1I、L2、L3 miss 指标；
+- L1D/L2/L3 stride-prefetch 的 `pfIssued`、`pfUseful`、`accuracy`、`coverage` 等指标。
 
 字段缺失时会留空，不会崩溃。
 
@@ -230,6 +281,7 @@ results/summary.csv
 建议跟踪：
 
 - `results/**/config.json`
+- `results/**/run_metadata.json`
 - `results/**/config.ini`
 - `results/**/simout`
 - `results/**/simerr`
@@ -245,7 +297,7 @@ results/summary.csv
 - `results/**/config.dot.svg`
 - `results/**/citations.bib`
 
-原因是 `tools/` 和 `logs/` 属于本地环境，`config.dot*` 与 `citations.bib` 属于 gem5 可再生输出。真正用于复现实验和分析的关键信息已经保存在 `config.json`、`config.ini`、`simout/simerr`、`stats.txt` 和 `summary.csv`。
+原因是 `tools/` 和 `logs/` 属于本地环境，`config.dot*` 与 `citations.bib` 属于 gem5 可再生输出。真正用于复现实验和分析的关键信息已经保存在 `run_metadata.json`、`config.json`、`config.ini`、`simout/simerr`、`stats.txt` 和 `summary.csv`。
 
 ## 后续工作
 
@@ -255,7 +307,7 @@ results/summary.csv
 2. 扩展 `scripts/build_benchmarks.sh` 支持多个 benchmark；
 3. 增加批量运行脚本，例如 `scripts/run_baselines.sh`；
 4. 继续扩展 `scripts/parse_stats.py` 的派生指标，例如 speedup、cycle reduction、miss reduction；
-5. 在多个 benchmark 上比较 `o3_nopf`、`o3_stridepf` 和后续 stream-engine 方案。
+5. 在多个 benchmark 上比较 `o3_nopf`、`o3_stridepf`、`o3_stridepf_d8`、`o3_stridepf_l1d_l2_l3_d8` 和后续 stream-engine 方案。
 
 ## 组会表述
 

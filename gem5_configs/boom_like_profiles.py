@@ -4,7 +4,8 @@ These profiles are inspired by public BOOM configurations surveyed in
 notes/boom_config_survey.md. They are not cycle-accurate BOOM models.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class O3Profile:
     l1i: CacheProfile
     l1d: CacheProfile
     l2: CacheProfile
+    l3: Optional[CacheProfile] = None
 
 
 MEDIUM_BOOM_LIKE = O3Profile(
@@ -88,9 +90,52 @@ MEDIUM_BOOM_LIKE = O3Profile(
 )
 
 
+PAPER_PF_STRIDE_LIKE = replace(
+    MEDIUM_BOOM_LIKE,
+    name="paper_pf_stride_like",
+    l1i=CacheProfile(
+        size="32KiB",
+        assoc=8,
+        tag_latency=2,
+        data_latency=2,
+        response_latency=2,
+        mshrs=8,
+        tgts_per_mshr=16,
+    ),
+    l1d=CacheProfile(
+        size="32KiB",
+        assoc=8,
+        tag_latency=2,
+        data_latency=2,
+        response_latency=2,
+        mshrs=8,
+        tgts_per_mshr=16,
+    ),
+    l2=CacheProfile(
+        size="256KiB",
+        assoc=16,
+        tag_latency=15,
+        data_latency=15,
+        response_latency=15,
+        mshrs=16,
+        tgts_per_mshr=16,
+    ),
+    l3=CacheProfile(
+        size="8MiB",
+        assoc=8,
+        tag_latency=20,
+        data_latency=20,
+        response_latency=20,
+        mshrs=20,
+        tgts_per_mshr=16,
+    ),
+)
+
+
 PROFILES = {
     "medium": MEDIUM_BOOM_LIKE,
     "medium_boom_like": MEDIUM_BOOM_LIKE,
+    "paper_pf_stride_like": PAPER_PF_STRIDE_LIKE,
 }
 
 
@@ -100,4 +145,3 @@ def get_profile(name: str) -> O3Profile:
     except KeyError as exc:
         available = ", ".join(sorted(PROFILES))
         raise ValueError(f"unknown profile '{name}', available: {available}") from exc
-

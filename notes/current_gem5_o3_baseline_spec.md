@@ -94,6 +94,63 @@ theoretical single-channel DDR3-1600 x64 bandwidth is about 12.8GB/s
 No shared L3 cache in the current baseline.
 ```
 
+## Optional Pf-Stride Comparison Configs
+
+The default baseline remains `medium_boom_like` without L3. Two additional
+stride-prefetch comparison configs are now implemented:
+
+```text
+o3_stridepf_d8:
+  profile: medium_boom_like
+  prefetcher: gem5 StridePrefetcher
+  attached cache level: L1 D-cache only
+  degree: 8
+  latency: 1 cycle
+
+o3_stridepf_l1d_l2_l3_d8:
+  profile: paper_pf_stride_like
+  prefetcher: gem5 StridePrefetcher
+  attached cache levels: L1 D-cache, L2 cache, L3 cache
+  degree: 8 at all three levels
+  latency: 1 cycle at all three levels
+```
+
+The `paper_pf_stride_like` profile keeps the current medium O3 core widths,
+ROB, IQ, LSQ, register files, FU pool, and branch predictor. It only changes
+the cache hierarchy toward the paper-style Pf-Stride comparison point:
+
+```text
+Private L1 I-cache:
+32KiB, 8-way, 64B line
+8 MSHRs, 16 targets/MSHR
+tag/data/response latency: 2/2/2 cycles
+
+Private L1 D-cache:
+32KiB, 8-way, 64B line
+8 MSHRs, 16 targets/MSHR
+tag/data/response latency: 2/2/2 cycles
+
+Private L2 cache:
+256KiB, 16-way, 64B line
+16 MSHRs, 16 targets/MSHR
+tag/data/response latency: 15/15/15 cycles
+
+L2-to-L3 bus:
+gem5 CoherentXBar / L2XBar
+16-byte width
+frontend/header/response latency: 1/1/1 cycles
+
+L3 cache:
+8MiB, 8-way, 64B line
+20 MSHRs, 16 targets/MSHR
+tag/data/response latency: 20/20/20 cycles
+```
+
+This is still an approximation. The implemented prefetcher is gem5's
+PC-correlated stride prefetcher, not the paper authors' full simulator model.
+The current setup also keeps single-channel `DDR3_1600_8x8` memory rather than
+the paper's two-channel memory system.
+
 ## What This Is Not
 
 This is not the kind of configuration below:
@@ -164,4 +221,3 @@ widths, 128 ROB entries, 64 IQ entries, 32-entry load/store queues, and private
 inspired by public BOOM configuration families but does not reproduce BOOM RTL
 timing or its exact execution-unit and branch-predictor implementation.
 ```
-

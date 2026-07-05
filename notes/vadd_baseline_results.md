@@ -7,6 +7,7 @@
 - benchmark 能编译为 RISC-V 可执行文件；
 - gem5 O3 no-prefetch baseline 能正常运行；
 - stride-prefetch baseline 能正常运行；
+- paper-like Pf-Stride degree=8 / L2+L3 cache hierarchy 能正常运行；
 - stats 能被整理为 CSV 表格。
 
 本文先记录 `vadd_N1024` 的最小流程验证结果，并补充 `vadd_N16384`
@@ -25,6 +26,8 @@
 | CPU baseline | Medium-like BOOM-inspired gem5 O3 |
 | no-prefetch result | `results/vadd_N1024/o3_nopf`, `results/vadd_N16384/o3_nopf` |
 | stride-prefetch result | `results/vadd_N1024/o3_stridepf`, `results/vadd_N16384/o3_stridepf` |
+| degree=8 stride result | `results/vadd_N16384/o3_stridepf_d8` |
+| L1D/L2/L3 Pf-Stride result | `results/vadd_N16384/o3_stridepf_l1d_l2_l3_d8` |
 | summary CSV | `results/summary.csv` |
 
 该 CPU 配置是受公开 BOOM 配置启发的 BOOM-like gem5 O3 baseline。
@@ -58,26 +61,31 @@ stride-prefetch run 的预取相关指标：
 为了检查 `N=1024` 是否过小、是否被启动开销和冷 cache 效应放大影响，
 进一步运行了 `vadd_N16384`。
 
-| 指标 | `o3_nopf` | `o3_stridepf` | 变化 |
-| --- | ---: | ---: | ---: |
-| simulated instructions | 502123 | 502123 | 相同 |
-| cycles | 508314 | 352590 | 减少约 30.6% |
-| IPC | 0.987821 | 1.424099 | 提高约 44.2% |
-| CPI | 1.012330 | 0.702198 | 降低 |
-| L1D overall misses | 94132 | 34050 | 减少约 63.8% |
-| L1D overall miss rate | 0.731173 | 0.263518 | 降低 |
-| L2 overall misses | 2462 | 4675 | 增加 |
+| 指标 | `o3_nopf` | `o3_stridepf` | `o3_stridepf_d8` | `o3_stridepf_l1d_l2_l3_d8` |
+| --- | ---: | ---: | ---: | ---: |
+| simulated instructions | 502123 | 502123 | 502123 | 502123 |
+| cycles | 508314 | 352590 | 312786 | 336766 |
+| IPC | 0.987821 | 1.424099 | 1.605324 | 1.491015 |
+| CPI | 1.012330 | 0.702198 | 0.622927 | 0.670684 |
+| L1D overall misses | 94132 | 34050 | 22845 | 11074 |
+| L1D overall miss rate | 0.731173 | 0.263518 | 0.177079 | 0.088165 |
+| L2 overall misses | 2462 | 4675 | 4668 | 1794 |
+| L3 overall misses | - | - | - | 2818 |
 
 `vadd_N16384` 的 stride-prefetch 预取相关指标：
 
-| 指标 | 数值 |
-| --- | ---: |
-| `pfIssued` | 40643 |
-| `pfUseful` | 4762 |
-| `pfUnused` | 188 |
-| `accuracy` | 0.117167 |
-| `coverage` | 0.898660 |
-| `pfLate` | 32752 |
+| 指标 | `o3_stridepf` L1D | `o3_stridepf_d8` L1D | `o3_stridepf_l1d_l2_l3_d8` L1D | L2 | L3 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `pfIssued` | 40643 | 75870 | 50097 | 26127 | 22746 |
+| `pfUseful` | 4762 | 5527 | 6767 | 2897 | 1940 |
+| `pfUnused` | 188 | 200 | 200 | 42 | - |
+| `accuracy` | 0.117167 | 0.072848 | 0.135078 | 0.110881 | 0.085290 |
+| `coverage` | 0.898660 | 0.913252 | 0.918930 | 0.768435 | 0.634402 |
+| `pfLate` | 32752 | 67951 | 42250 | 22220 | 19084 |
+
+相对 `o3_nopf`，`o3_stridepf_d8` 将 cycle 数减少约 38.5%，IPC 提高约
+62.5%。`o3_stridepf_l1d_l2_l3_d8` 将 cycle 数减少约 33.7%，IPC 提高约
+50.9%。
 
 ## 初步解读
 
@@ -87,10 +95,21 @@ stride-prefetch run 的预取相关指标：
 
 同时，预取并不是免费的。`o3_stridepf` 的 L2 overall misses 比 no-prefetch 更多，说明预取向下一级 cache / memory system 引入了额外流量。`pfIssued` 远大于 `pfUseful`，且 `accuracy` 只有约 0.139，也说明当前预取器配置并不是完美命中未来 demand access。
 
+新增的 `o3_stridepf_d8` 是一个隔离对照：只把 L1D stride prefetcher 的
+degree 从默认 4 提到 8。它在当前 `vadd_N16384` 上效果最好，说明这个规则
+streaming kernel 对更激进的预取距离敏感。
+
+新增的 `o3_stridepf_l1d_l2_l3_d8` 更接近论文 Pf-Stride 对照组：L1D、L2、
+L3 都启用 degree=8、latency=1 的 gem5 StridePrefetcher，并使用
+32KiB 8-way L1、256KiB 16-way L2、8MiB L3。它显著降低 L1D/L2 miss，但
+IPC 低于 L1D-only degree=8，说明多级预取和更深缓存层次会改变访问路径与
+预取流量，不能只用 L1D miss 判断最终性能。
+
 因此，这组结果适合作为后续 stream-engine 机制的 baseline：
 
 - no-prefetch O3 表示普通乱序核基线；
 - stride-prefetch O3 表示已有硬件预取机制基线；
+- Pf-Stride degree=8 / L1D+L2+L3 表示更接近论文对照组的 aggressive prefetch baseline；
 - 后续 stream engine 不能只和 no-prefetch 比，还应和 stride-prefetch 比。
 
 ## 和 Stream Engine 的区别
@@ -106,7 +125,8 @@ stride prefetcher 主要解决“数据能否更早进入 cache”的问题。�
 1. 编译 `vadd_N1024`；
 2. 跑 gem5 O3 no-prefetch；
 3. 跑 gem5 O3 stride-prefetch；
-4. 生成 `results/summary.csv`；
-5. 记录 BOOM-like O3 配置来源和验证结果。
+4. 跑 Pf-Stride degree=8 和 L1D/L2/L3 版本；
+5. 生成 `results/summary.csv`；
+6. 记录 BOOM-like O3 配置来源和验证结果。
 
 下一步应增加更多流式 benchmark，例如 `saxpy`、`triad` 或 `stencil1d`，并对每个 benchmark 使用至少一个比 `N=1024` 更大的规模，避免只基于单个小 kernel 得出过强结论。

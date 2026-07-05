@@ -18,6 +18,11 @@ if THIS_DIR not in sys.path:
 from boom_like_profiles import get_profile
 
 
+PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
+STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
+CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS)
+
+
 class L1ICache(Cache):
     is_read_only = True
 
@@ -28,6 +33,38 @@ class L1DCache(Cache):
 
 class L2Cache(Cache):
     pass
+
+
+class L3Cache(Cache):
+    pass
+
+
+def selected_profile_name(args):
+    if args.profile == "auto":
+        if args.config == PAPER_STRIDE_CONFIG:
+            return "paper_pf_stride_like"
+        return "medium_boom_like"
+    return args.profile
+
+
+def stride_prefetch_degree(args):
+    if args.config in ("o3_stridepf_d8", PAPER_STRIDE_CONFIG):
+        return 8
+    return args.stridepf_degree
+
+
+def stride_prefetch_latency(args):
+    if args.config in ("o3_stridepf_d8", PAPER_STRIDE_CONFIG):
+        return 1
+    return args.stridepf_latency
+
+
+def make_stride_prefetcher(args):
+    return StridePrefetcher(
+        degree=stride_prefetch_degree(args),
+        latency=stride_prefetch_latency(args),
+        prefetch_on_access=args.stridepf_on_access,
+    )
 
 
 def apply_o3_profile(cpu, profile):
@@ -67,7 +104,7 @@ def make_cache(cache_cls, cache_profile, prefetcher=None, **kwargs):
 
 
 def build_system(args):
-    profile = get_profile(args.profile)
+    profile = get_profile(selected_profile_name(args))
     system = System()
     system.mem_mode = "timing"
     system.mem_ranges = [AddrRange(args.mem_size)]
@@ -90,16 +127,18 @@ def build_system(args):
     apply_o3_profile(system.cpu, profile)
 
     dcache_prefetcher = None
-    if args.config == "o3_stridepf":
-        dcache_prefetcher = StridePrefetcher(
-            degree=args.stridepf_degree,
-            latency=args.stridepf_latency,
-            prefetch_on_access=args.stridepf_on_access,
-        )
+    if args.config in STRIDE_CONFIGS:
+        dcache_prefetcher = make_stride_prefetcher(args)
+
+    l2_prefetcher = None
+    l3_prefetcher = None
+    if args.config == PAPER_STRIDE_CONFIG:
+        l2_prefetcher = make_stride_prefetcher(args)
+        l3_prefetcher = make_stride_prefetcher(args)
 
     system.cpu.icache = make_cache(L1ICache, profile.l1i)
     system.cpu.dcache = make_cache(L1DCache, profile.l1d, dcache_prefetcher)
-    system.l2cache = make_cache(L2Cache, profile.l2)
+    system.l2cache = make_cache(L2Cache, profile.l2, l2_prefetcher)
 
     system.membus = SystemXBar()
     system.l2bus = L2XBar()
@@ -110,7 +149,19 @@ def build_system(args):
     system.cpu.dcache.mem_side = system.l2bus.cpu_side_ports
 
     system.l2cache.cpu_side = system.l2bus.mem_side_ports
-    system.l2cache.mem_side = system.membus.cpu_side_ports
+    if args.config == PAPER_STRIDE_CONFIG:
+        if profile.l3 is None:
+            raise ValueError(
+                f"profile '{selected_profile_name(args)}' has no L3 cache for "
+                f"config '{PAPER_STRIDE_CONFIG}'"
+            )
+        system.l3bus = L2XBar(width=16)
+        system.l3cache = make_cache(L3Cache, profile.l3, l3_prefetcher)
+        system.l2cache.mem_side = system.l3bus.cpu_side_ports
+        system.l3cache.cpu_side = system.l3bus.mem_side_ports
+        system.l3cache.mem_side = system.membus.cpu_side_ports
+    else:
+        system.l2cache.mem_side = system.membus.cpu_side_ports
 
     system.cpu.createInterruptController()
     system.system_port = system.membus.cpu_side_ports
@@ -143,11 +194,11 @@ def parse_args():
     )
     parser.add_argument(
         "--config",
-        choices=("o3_nopf", "o3_stridepf"),
+        choices=CONFIG_CHOICES,
         default="o3_nopf",
-        help="Baseline configuration. o3_stridepf is prepared for Step 7.",
+        help="Baseline or stride-prefetch configuration.",
     )
-    parser.add_argument("--profile", default="medium_boom_like")
+    parser.add_argument("--profile", default="auto")
     parser.add_argument("--mem-size", default="512MiB")
     parser.add_argument("--cache-line-size", type=int, default=64)
     parser.add_argument("--sys-clock", default="1GHz")
@@ -164,9 +215,10 @@ def main():
     root = Root(full_system=False, system=build_system(args))
     m5.instantiate()
 
+    profile_name = selected_profile_name(args)
     print(
         "Beginning simulation: "
-        f"config={args.config}, profile={args.profile}, cmd={args.cmd}"
+        f"config={args.config}, profile={profile_name}, cmd={args.cmd}"
     )
     exit_event = m5.simulate()
     print(f"Exiting @ tick {m5.curTick()} because {exit_event.getCause()}")
