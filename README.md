@@ -34,6 +34,8 @@ notes/
   boom_survey_cn.md           BOOM 公开配置调研，中文版
   boom_detailed_config_survey_cn.md
                               BOOM 细粒度配置调研：FU/cache/BPD
+  current_gem5_o3_baseline_spec.md
+                              当前 gem5 O3 baseline 机器规格表
   boom_like_config_verification.md
                               BOOM-like O3 参数验证记录
   vadd_baseline_results.md    当前 vadd baseline 结果说明
