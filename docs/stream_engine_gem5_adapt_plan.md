@@ -552,41 +552,72 @@ StreamEngine -> L2 cache
 
 如果第一版是功能模型，stall 类 stats 可先置 0 或只统计 engine 内部估算值。
 
-## 需要重点确认的问题
+## 开始实现前状态
 
-1. `docs/指令集文档.md` 已按第 2 节统一 `funct3`：
-   `SSR=110`、`SSS=111`。后续 decoder 按这个版本实现。
+当前已经可以开始第一版实现。剩下的不是方向性决策，而是把第一个可运行闭环
+落到代码里。
 
-2. direct AXI 使用虚拟地址还是物理地址？
-   当前建议功能阶段用 `SETranslatingPortProxy`，timing 阶段在 stream engine
-   发请求前做 VA->PA 翻译，再用物理地址访问 `system.membus`。
+已经拍板的部分：
 
-3. direct AXI 对象的编程约束如何在 benchmark 中表达？
+- 指令编码按 `docs/指令集文档.md` v0.6：`CFG=000`、`SSR=110`、`SSS=111`。
+- 第一版只要求 `SSS ADD` 跑通 vector add。
+- 不把 TLB 建模为目标 DSP CPU / RTL 的硬件特性。
+- SE-mode 的普通 O3 访存仍经过 gem5 MMU/TLB 翻译入口，但这视为仿真适配层。
+- stream direct AXI 路径在 StreamEngine adapter 发请求前做 VA->PA。
+- 第一版优先做 functional model，跑通后再做 timing direct AXI port。
+- 第一版不做完整 O3 commit-level difftest，只预留 stream event trace。
+
+不阻塞第一版开工、可以边做边定的部分：
+
+- `streamNum`、`l2LineWord`、`fifoWord` 先按 RTL / vector add 最小需求取值。
+- `cfg_load` 第一版可以先不支持，或临时映射成 `cfg_axi_load`。
+- wait/drain 第一版 functional model 可以先同步完成，timing 模型再补显式等待。
+- direct AXI 与 CPU cache 的一致性先按软件编程约束记录，bring-up 用 functional
+  path 避免 stale cache 问题。
+
+真正还差的起步代码：
+
+1. 写项目内 v0.6 stream 指令 header。
+2. 新增 `benchmarks/stream_vadd/`，把 vector add 改成 `cfg_* + sss_add`。
+3. 在 gem5 RISC-V decoder 中识别 stream custom-0 指令。
+4. 加一个最小 StreamEngine functional model，保存 descriptor/FIFO/ready，
+   能同步完成 load/add/store。
+5. 新增 `o3_stream_axi_functional` 配置并跑通 `stream_vadd` 自检。
+
+完成这五项后，就进入第二阶段：timing direct AXI port、拆页 VA->PA、stats 和
+事件 trace。
+
+## 后续仍需确认的问题
+
+以下问题不阻塞第一版 functional model 开工，但会影响 timing direct AXI、
+更复杂 benchmark 或后续论文实验描述。
+
+1. direct AXI 对象的编程约束如何在 benchmark 中表达？
    需要一个明确的 stream_vadd 写法，避免输入/输出数组被 CPU cache 路径污染。
 
-4. `tileStride=128` 对 vector add 的原因是什么？
+2. `tileStride=128` 对 vector add 的原因是什么？
    对 32-word line 来说 128B 正好是一条 line。第一版可按这个理解实现，但需要确认。
 
-5. `cfg_store` 是否也应支持 stride / tileStride？
+3. `cfg_store` 是否也应支持 stride / tileStride？
    RTL store 写回里目前看起来 `addrDyn(2)` 按 `l2Line` 推进，没有用 `strideCfg(2)`。vector add 连续写没问题，后续更复杂 store 需要确认。
 
-6. stream 数量和 FIFO 尺寸最终是多少？
+4. stream 数量和 FIFO 尺寸最终是多少？
    从代码看 vector add 至少用 0/1 load、2 store，FIFO 是两个 cacheline 规模。需要确认 `streamNum`、`l2LineWord`、`fifoWord` 的最终常量。
 
-7. 是否需要保留 `cfg_load`？
+5. 是否需要保留 `cfg_load`？
    第一版只做 AXI，因此可以只支持 `cfg_axi_load`。如果软件仍会发 `cfg_load`，需要决定是否把它当成 AXI load。
 
-8. 是否要在第一版里实现 `SSR ADD`？
+6. 是否要在第一版里实现 `SSR ADD`？
     vector add 不需要，matmul inner-product 后续可能需要 stream -> register
     的写回结果。建议第一版先做 `SSS ADD`，`SSR ADD` 作为第二个小目标。
 
-9. stream 指令是否需要 memory fence 语义？
+7. stream 指令是否需要 memory fence 语义？
     配置指令、load stream、store stream 与普通 CPU load/store 的顺序关系需要定义。第一版可以在软件侧插入明确的等待/完成指令，但当前 v0.6 指令集中没有看到 wait/fence。
 
-10. stream kernel 如何知道所有 store 已写回完成？
+8. stream kernel 如何知道所有 store 已写回完成？
     `stream-add.c` 中循环后没有显式 wait。RTL 可能依赖程序结束前自然 drain。gem5 benchmark 若要校验 C，需要一个可等待 stream 完成的机制，或者让 `sss_add` / `cfg_store` 模型同步完成。
 
-11. 是否要把 stream semantic difftest 作为第二阶段目标？
+9. 是否要把 stream semantic difftest 作为第二阶段目标？
     第一版建议只预留事件 trace；功能稳定后再引入 golden interpreter。
 
 ## 建议的下一步
