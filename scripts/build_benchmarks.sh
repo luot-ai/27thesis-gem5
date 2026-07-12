@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
+GENERATED_DIR="${BUILD_DIR}/generated"
 
 RISCV_GCC="${RISCV_GCC:-}"
 OPT="${OPT:--O3}"
@@ -11,6 +12,7 @@ MATMUL_M="${MATMUL_M:-32}"
 MATMUL_N="${MATMUL_N:-32}"
 MATMUL_K="${MATMUL_K:-32}"
 BENCHMARKS="${BENCHMARKS:-${BENCHMARK:-vadd matmul_inner}}"
+STATIC_VADD_DATA="${STATIC_VADD_DATA:-1}"
 
 find_riscv_gcc() {
     if [[ -n "${RISCV_GCC}" ]]; then
@@ -42,8 +44,48 @@ EOF
 CC="$(find_riscv_gcc)"
 mkdir -p "${BUILD_DIR}"
 
+generate_static_vadd_data() {
+    local data_src="${GENERATED_DIR}/vadd_static_data_N${N}.c"
+    mkdir -p "${GENERATED_DIR}"
+    python3 - "${N}" "${data_src}" <<'PY'
+from pathlib import Path
+import sys
+
+n = int(sys.argv[1])
+path = Path(sys.argv[2])
+
+def write_array(f, name, values):
+    f.write(f"int32_t {name}[{n}] = {{\n")
+    for idx in range(0, n, 8):
+        chunk = values[idx : idx + 8]
+        f.write("    " + ", ".join(str(v) for v in chunk))
+        if idx + 8 < n:
+            f.write(",")
+        f.write("\n")
+    f.write("};\n\n")
+
+with path.open("w", encoding="utf-8") as f:
+    f.write("#include <stdint.h>\n\n")
+    write_array(f, "vadd_a", list(range(n)))
+    write_array(f, "vadd_b", [2 * i + 1 for i in range(n)])
+    f.write(f"int32_t vadd_y[{n}];\n")
+PY
+    echo "${data_src}"
+}
+
+vadd_data_args() {
+    if [[ "${STATIC_VADD_DATA}" == "1" ]]; then
+        local data_src
+        data_src="$(generate_static_vadd_data)"
+        printf '%s\n' "-DUSE_STATIC_VADD_DATA" "${data_src}"
+    fi
+}
+
 build_vadd() {
+    local data_args=()
+    mapfile -t data_args < <(vadd_data_args)
     "${CC}" "${OPT}" -static -DN="${N}" \
+        "${data_args[@]}" \
         "${ROOT_DIR}/benchmarks/vadd/vadd.c" \
         -o "${BUILD_DIR}/vadd_N${N}.riscv"
 
@@ -62,7 +104,10 @@ build_matmul_inner() {
 }
 
 build_stream_vadd() {
+    local data_args=()
+    mapfile -t data_args < <(vadd_data_args)
     "${CC}" "${OPT}" -static -DN="${N}" \
+        "${data_args[@]}" \
         "${ROOT_DIR}/benchmarks/stream_vadd/stream_vadd.c" \
         -o "${BUILD_DIR}/stream_vadd_N${N}.riscv"
 

@@ -116,10 +116,10 @@ pendingLoad.valid = true
 pendingLoad.fifoId = selected_fifo
 pendingLoad.segment = selected_segment
 pendingLoad.addr = addrDyn[selected_fifo]
-pendingLoad.doneCycle = seCycle + refillLatency(segmentWords)
+pendingLoad.readyTick = cpu.clockEdge(refillLatency(segmentWords))
 ```
 
-到 `doneCycle` 后才完成：
+到完成事件触发后才完成：
 
 ```text
 for off in 0 .. activeWords-1:
@@ -149,10 +149,10 @@ pendingStore.valid = true
 pendingStore.fifoId = store_fifo
 pendingStore.segment = selected_segment
 pendingStore.addr = addrDyn[store_fifo]
-pendingStore.doneCycle = seCycle + drainLatency(segmentWords)
+pendingStore.readyTick = cpu.clockEdge(drainLatency(segmentWords))
 ```
 
-到 `doneCycle` 后才完成：
+到完成事件触发后才完成：
 
 ```text
 for off in 0 .. activeWords-1:
@@ -167,49 +167,69 @@ for off in 0 .. activeWords-1:
 临时提供一个“仿真结束前 drain all”机制，或者后续补 `stream_wait`。否则最后一个
 store 半区可能还在 pending。
 
-## SE 内部 Cycle
+## 异步事件模型
 
-v2c 可以先维护一个 StreamEngine 内部 cycle：
+当前 v2c 使用 gem5 `EventFunctionWrapper` 建模后台访存进度，不再依赖 SSS 每次
+ready check 手动推进 `virtualMemoryCycle`。
+
+访存侧是一个配置完成后启动的周期性状态机：
 
 ```text
-seCycle
+每个 CPU cycle 检查一次 stream buffer 状态
+如果 load 半区为空且该 load stream 已配置完成，尝试发起 read refill
+如果 store 半区满且该 store stream 已配置完成，尝试发起 write drain
+read/write 完成事件到期后更新 FIFO / readyMap
 ```
 
-每次发生下面任一动作时推进：
+这件事不由 `sssCanIssue()` 触发。`sssCanIssue()` 只看 readyMap 决定计算指令是否
+可发射。SSS 计算写回或配置指令只是让 memory-side tick 保持调度，真正是否发请求
+由 memory-side tick 自己判断。
 
-- IQ 中 stream SSS 因 readyMap 不满足而等待；
-- SSS 发射/完成；
-- 显式调用 `tickMemorySide()`；
-- 需要 drain all / wait all 时推进到 pending 请求完成。
+读写通路分开建模：
 
-更理想的实现是把 StreamEngine 做成 gem5 `ClockedObject` 或挂事件，每个 CPU cycle
-自动 tick。v2c 为了降低改动量，可以先在 non-spec 等待路径和 SSS 执行路径中推进
-`seCycle`，但文档中要标明这是简化模型。
+```text
+pendingRead  : 最多一个，多个 load stream 用简单 RR 选择
+pendingWrite : 最多一个，store stream 满半区后发起
+
+pendingRead 和 pendingWrite 可以同时存在
+```
+
+发起 pending 请求时，StreamEngine 会用 CPU 时钟把配置的 cycle 延迟转换成完成 tick：
+
+```text
+readyTick = tc->getCpuPtr()->clockEdge(latencyCycles)
+```
+
+这让 refill/drain 可以在 CPU 等待 SSS readyMap 的同时后台完成。它仍然不是真实
+timing AXI，因为数据搬运本身仍通过 functional proxy 完成，只是完成时间由事件控制。
 
 ## 固定 Latency 参数
 
-建议先使用一个运行时配置参数，不修改 `StreamEngine.py` 的默认值：
-
-```text
-baseBurstWords = 32
-baseRefillLatency = 176 CPU cycles
-baseDrainLatency  = 176 CPU cycles
-```
-
-当前脚本参数名：
+当前使用以下运行时配置参数：
 
 ```text
 --stream-mem-burst-latency 176
+--stream-mem-refill-latency 176
+--stream-mem-drain-latency 176
+--stream-mem-burst-words 32
 ```
 
-这个值会传给 gem5 SimObject 参数 `mem_burst_latency`。由于该参数已经存在于当前
-`gem5.opt`，只改运行配置不需要重新编译 gem5。只有新增 SimObject 参数或修改
-`StreamEngine.py` 默认值时，才需要重新 scons。
+其中 `--stream-mem-burst-latency` 是兼容/快捷参数；如果没有显式指定 refill/drain，
+运行脚本会把它同时传给 refill 和 drain。
+
+```text
+refillLatency = stream_mem_refill_latency or stream_mem_burst_latency
+drainLatency  = stream_mem_drain_latency  or stream_mem_burst_latency
+```
+
+本轮新增了 `mem_refill_latency`、`mem_drain_latency`、`mem_burst_words` 等
+SimObject 参数，所以代码修改后需要重新 scons。后续如果只是改这些参数的命令行取值，
+则不需要重新编译。
 
 不同半区大小按 32-word burst chunk 放缩：
 
 ```text
-latency = ceil(segmentWords / baseBurstWords) * baseLatency
+latency = ceil(segmentWords / memBurstWords) * baseLatency
 ```
 
 例如：
@@ -223,6 +243,9 @@ latency = ceil(segmentWords / baseBurstWords) * baseLatency
 这不是带宽精确模型。176 cycles 的含义是：128B 连续半区约等于“一个 L2 miss
 首包延迟 + 第二条连续 cache line 的较小增量”的乐观估计。后续 v2d 接 timing port
 后，这个固定参数可以退化成 debug / fallback 参数。
+
+读写通路不再用 load/store 优先级参数互斥仲裁；它们可以同时 pending。load 侧多个
+FIFO 之间使用简单 RR。
 
 ## 与 SSS 的关系
 
@@ -247,20 +270,21 @@ storeReadyMap[dst][idxD] = true
 
 storeReadyMap 置位后，访存侧后台看到半区 full，再发起异步 drain。
 
-## 统计项建议
+## 统计项
 
-v2c 至少增加：
+v2c 已加入：
 
 ```text
-asyncLoadRequests
-asyncLoadCompletions
-asyncStoreRequests
-asyncStoreCompletions
-loadPendingCycles
-storePendingCycles
-sssSourceWaitCycles
-sssDestWaitCycles
-seCycles
+memBurstStarts
+loadBurstStarts
+storeBurstStarts
+memBurstBusyCycles
+loadBurstBusyCycles
+storeBurstBusyCycles
+memoryTickCycles
+sssReadyChecks
+sssSourceStallCycles
+sssDestStallCycles
 ```
 
 已有的：
@@ -274,6 +298,8 @@ computeOps
 ```
 
 可以继续保留，但含义要从“同步完成次数”更新为“异步请求完成次数”。
+
+其中 `memBurstBusyCycles` 记录简化访存通路被 pending burst 占用的配置 cycle 数。
 
 ## 能得到什么时序数据
 

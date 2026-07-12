@@ -131,7 +131,9 @@ def build_system(args):
         system.stream_engine = StreamEngine(
             fifo_count=4,
             stream_segment_bytes=args.stream_segment_bytes,
-            mem_burst_latency=args.stream_mem_burst_latency,
+            mem_refill_latency=args.stream_mem_refill_latency,
+            mem_drain_latency=args.stream_mem_drain_latency,
+            mem_burst_words=args.stream_mem_burst_words,
             compute_latency=3,
             initiation_interval=1,
         )
@@ -213,6 +215,9 @@ def parse_args():
     parser.add_argument("--cache-line-size", type=int, default=64)
     parser.add_argument("--stream-segment-bytes", type=int, default=128)
     parser.add_argument("--stream-mem-burst-latency", type=int, default=176)
+    parser.add_argument("--stream-mem-refill-latency", type=int, default=176)
+    parser.add_argument("--stream-mem-drain-latency", type=int, default=176)
+    parser.add_argument("--stream-mem-burst-words", type=int, default=32)
     parser.add_argument("--sys-clock", default="1GHz")
     parser.add_argument("--cpu-clock", default="2GHz")
     parser.add_argument("--sys-voltage", default="1.0V")

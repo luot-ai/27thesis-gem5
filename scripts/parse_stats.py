@@ -49,28 +49,51 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--results-dir", default="results")
     parser.add_argument("--output", default=None)
+    parser.add_argument(
+        "--stat-block",
+        choices=("first", "last"),
+        default="first",
+        help=(
+            "Which statistics block to parse when stats.txt contains ROI "
+            "dump/reset sections. The first block is the ROI block for the "
+            "current benchmarks."
+        ),
+    )
     return parser.parse_args()
 
 
-def parse_stats_file(path: Path):
-    stats = {}
+def parse_stats_file(path: Path, stat_block: str):
+    blocks = []
+    current = None
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         stripped = line.strip()
+        if "Begin Simulation Statistics" in stripped:
+            current = {}
+            continue
+        if "End Simulation Statistics" in stripped:
+            if current is not None:
+                blocks.append(current)
+                current = None
+            continue
+        if current is None:
+            continue
         if not stripped or stripped.startswith("#") or stripped.startswith("-"):
             continue
         parts = stripped.split()
         if len(parts) < 2:
             continue
         key, value = parts[0], parts[1]
-        stats[key] = value
-    return stats
+        current[key] = value
+    if not blocks:
+        return {}
+    return blocks[0] if stat_block == "first" else blocks[-1]
 
 
-def row_for_stats(stats_path: Path, results_dir: Path):
+def row_for_stats(stats_path: Path, results_dir: Path, stat_block: str):
     rel = stats_path.relative_to(results_dir)
     bench = rel.parts[0] if len(rel.parts) >= 3 else ""
     config = rel.parts[1] if len(rel.parts) >= 3 else ""
-    stats = parse_stats_file(stats_path)
+    stats = parse_stats_file(stats_path, stat_block)
     row = {
         "benchmark": bench,
         "config": config,
@@ -87,7 +110,7 @@ def main():
     output = Path(args.output).resolve() if args.output else results_dir / "summary.csv"
 
     rows = [
-        row_for_stats(path, results_dir)
+        row_for_stats(path, results_dir, args.stat_block)
         for path in sorted(results_dir.glob("*/*/stats.txt"))
     ]
 

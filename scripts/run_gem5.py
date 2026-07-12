@@ -96,6 +96,9 @@ def parse_args():
     parser.add_argument("--cache-line-size", type=int, default=64)
     parser.add_argument("--stream-segment-bytes", type=int, default=128)
     parser.add_argument("--stream-mem-burst-latency", type=int, default=176)
+    parser.add_argument("--stream-mem-refill-latency", type=int)
+    parser.add_argument("--stream-mem-drain-latency", type=int)
+    parser.add_argument("--stream-mem-burst-words", type=int, default=32)
     parser.add_argument("--sys-clock", default="1GHz")
     parser.add_argument("--cpu-clock", default="2GHz")
     parser.add_argument("--stridepf-degree", type=int, default=4)
@@ -139,6 +142,20 @@ def build_command(args, outdir: Path):
         str(args.stream_segment_bytes),
         "--stream-mem-burst-latency",
         str(args.stream_mem_burst_latency),
+        "--stream-mem-refill-latency",
+        str(
+            args.stream_mem_refill_latency
+            if args.stream_mem_refill_latency is not None
+            else args.stream_mem_burst_latency
+        ),
+        "--stream-mem-drain-latency",
+        str(
+            args.stream_mem_drain_latency
+            if args.stream_mem_drain_latency is not None
+            else args.stream_mem_burst_latency
+        ),
+        "--stream-mem-burst-words",
+        str(args.stream_mem_burst_words),
         "--sys-clock",
         args.sys_clock,
         "--cpu-clock",
@@ -194,6 +211,23 @@ def write_run_metadata(args, outdir: Path, cmd):
             ),
             "mem_burst_latency": (
                 args.stream_mem_burst_latency if stream_enabled else None
+            ),
+            "mem_refill_latency": (
+                args.stream_mem_refill_latency
+                if stream_enabled and args.stream_mem_refill_latency is not None
+                else args.stream_mem_burst_latency
+                if stream_enabled
+                else None
+            ),
+            "mem_drain_latency": (
+                args.stream_mem_drain_latency
+                if stream_enabled and args.stream_mem_drain_latency is not None
+                else args.stream_mem_burst_latency
+                if stream_enabled
+                else None
+            ),
+            "mem_burst_words": (
+                args.stream_mem_burst_words if stream_enabled else None
             ),
         },
         "note": (

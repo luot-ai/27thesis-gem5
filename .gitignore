@@ -15,6 +15,7 @@ __pycache__/
 .vscode/
 
 # gem5-generated visualizations and citation files can be regenerated.
+build/generated/
 results/**/config.dot
 results/**/config.dot.pdf
 results/**/config.dot.svg

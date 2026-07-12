@@ -2338,7 +2338,9 @@
             "eventq_index": 0,
             "fifo_count": 4,
             "initiation_interval": 1,
-            "mem_burst_latency": 176,
+            "mem_burst_words": 32,
+            "mem_drain_latency": 176,
+            "mem_refill_latency": 176,
             "stream_segment_bytes": 128,
             "system": "system"
         },
