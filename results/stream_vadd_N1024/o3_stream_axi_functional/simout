@@ -3,12 +3,12 @@ gem5 Simulator System.  https://www.gem5.org
 gem5 is copyrighted software; use the --copyright option for details.
 
 gem5 version 25.1.0.1
-gem5 compiled Jul  5 2026 20:11:19
-gem5 started Jul  5 2026 20:41:35
-gem5 executing on luot-VMware-Virtual-Platform, pid 78717
-command line: /home/luot/27thesis/tools/gem5/build/RISCV/gem5.opt --outdir=/home/luot/27thesis/results/stream_vadd_N1024/o3_stream_axi_functional /home/luot/27thesis/gem5_configs/riscv_o3_baseline.py --cmd /home/luot/27thesis/build/stream_vadd_N1024.riscv --config o3_stream_axi_functional --profile medium_boom_like --mem-size 512MiB --cache-line-size 64 --stream-segment-bytes 128 --sys-clock 1GHz --cpu-clock 2GHz --stridepf-degree 4 --stridepf-latency 1
+gem5 compiled Jul 12 2026 14:19:11
+gem5 started Jul 12 2026 15:04:43
+gem5 executing on luot-VMware-Virtual-Platform, pid 19186
+command line: /home/luot/27thesis/tools/gem5/build/RISCV/gem5.opt --outdir=/home/luot/27thesis/results/stream_vadd_N1024/o3_stream_axi_functional /home/luot/27thesis/gem5_configs/riscv_o3_baseline.py --cmd /home/luot/27thesis/build/stream_vadd_N1024.riscv --config o3_stream_axi_functional --profile medium_boom_like --mem-size 512MiB --cache-line-size 64 --stream-segment-bytes 128 --stream-mem-burst-latency 176 --sys-clock 1GHz --cpu-clock 2GHz --stridepf-degree 4 --stridepf-latency 1
 
 info: Standard input is not a terminal, disabling listeners.
 Beginning simulation: config=o3_stream_axi_functional, profile=medium_boom_like, cmd=/home/luot/27thesis/build/stream_vadd_N1024.riscv
 stream_vadd passed N=1024
-Exiting @ tick 106304000 because exiting with last active thread context
+Exiting @ tick 114090000 because exiting with last active thread context

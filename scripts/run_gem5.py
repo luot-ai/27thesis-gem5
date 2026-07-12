@@ -95,6 +95,7 @@ def parse_args():
     parser.add_argument("--mem-size", default="512MiB")
     parser.add_argument("--cache-line-size", type=int, default=64)
     parser.add_argument("--stream-segment-bytes", type=int, default=128)
+    parser.add_argument("--stream-mem-burst-latency", type=int, default=176)
     parser.add_argument("--sys-clock", default="1GHz")
     parser.add_argument("--cpu-clock", default="2GHz")
     parser.add_argument("--stridepf-degree", type=int, default=4)
@@ -136,6 +137,8 @@ def build_command(args, outdir: Path):
         str(args.cache_line_size),
         "--stream-segment-bytes",
         str(args.stream_segment_bytes),
+        "--stream-mem-burst-latency",
+        str(args.stream_mem_burst_latency),
         "--sys-clock",
         args.sys_clock,
         "--cpu-clock",
@@ -188,6 +191,9 @@ def write_run_metadata(args, outdir: Path, cmd):
             "mode": "axi_functional" if stream_enabled else "none",
             "stream_segment_bytes": (
                 args.stream_segment_bytes if stream_enabled else None
+            ),
+            "mem_burst_latency": (
+                args.stream_mem_burst_latency if stream_enabled else None
             ),
         },
         "note": (
