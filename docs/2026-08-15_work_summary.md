@@ -130,12 +130,62 @@ MSHR 被占用时产生的阻塞。
 该配置是敏感性分析的极端下界，不应直接称为“gem5 完全没有 MSHR”。当前 stream
 数据路径绕过 L1/L2，因此阻塞普通 cache 会显著放大 stream 相对 origin 的收益。
 
+## Origin MSHR 饱和点扫描
+
+新增 `scripts/sweep_origin_mshrs.py`，同时扫描 L1I、L1D 和 L2 的 MSHR 数量：
+
+```text
+1, 2, 4, 8, 16, 32
+```
+
+CPU 使用 `zircon_width_like`、单 LSU、`N=1024` origin vadd。先固定
+`tgts_per_mshr=1`，隔离独立 outstanding cacheline 数量的作用：
+
+| 每级 MSHR | ROI cycles | 相对前一点减少 | L1D no-MSHR blocked cycles |
+| ---: | ---: | ---: | ---: |
+| 1 | 34084 | - | 30837 |
+| 2 | 23994 | 29.60% | 10422 |
+| 4 | 15426 | 35.71% | 0 |
+| 8 | 15360 | 0.43% | 0 |
+| 16 | 15360 | 0.00% | 0 |
+| 32 | 15360 | 0.00% | 0 |
+
+再使用正常配置的 `tgts_per_mshr=16`，允许同一 cacheline 的请求合并：
+
+| 每级 MSHR | ROI cycles | 相对前一点减少 | L1D no-MSHR blocked cycles | L2 no-MSHR blocked cycles |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 34084 | - | 30837 | 12626 |
+| 2 | 18297 | 46.32% | 13936 | 5129 |
+| 4 | 12985 | 29.03% | 0 | 0 |
+| 8 | 13149 | -1.26% | 0 | 0 |
+| 16 | 13149 | 0.00% | 0 | 0 |
+| 32 | 13149 | 0.00% | 0 | 0 |
+
+两条曲线结论一致：
+
+- `MSHR=4` 是该 workload 的实用拐点，并消除了 L1I/L1D/L2 的 no-MSHR 阻塞；
+- `MSHR=8` 是保守饱和值；
+- 从 8 增加到 16 或 32 没有周期收益；
+- `targets=16` 时 4 比 8 少 164 cycles，属于请求时序和队列交互造成的小幅波动，
+  不能解释为更多 MSHR 普遍有害。
+
+当前正常 Zircon-width 配置使用 L1I/L1D/L2 = `8/16/32` MSHR。对这个
+`N=1024` vadd 来说明显超出需求；若目标是贴近资源较小的 RTL baseline，可先使用
+每级 4 MSHR，并保留 `tgts_per_mshr=16`。
+
+原始汇总：
+
+- `results/vadd_N1024_mshr_sweep/mshr_sweep_targets_1.csv`
+- `results/vadd_N1024_mshr_sweep/mshr_sweep_targets_16.csv`
+
 ## 今日提交
 
 ```text
 4b1f764  增加 O3 循环 trace 分析工具
 1056291  增加单 LSU 配置并记录向量加结果
+95da80f  增加 Zircon 宽度近似配置并记录结果
+d6926fb  增加阻塞 Cache 配置并评估 MSHR 影响
 87a6b36  arch-riscv: 修复无目标寄存器指令的反汇编（tools/gem5）
 ```
 
-本轮另新增“增加 Zircon 宽度近似配置并记录结果”提交，保存本文档、配置和实测结果。
+本轮另新增“扫描 origin 的 MSHR 饱和点”提交，保存扫描脚本、本文档和实测结果。

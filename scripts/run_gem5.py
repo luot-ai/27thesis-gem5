@@ -106,6 +106,10 @@ def parse_args():
         help="Top-level results directory",
     )
     parser.add_argument(
+        "--result-name",
+        help="Optional result subdirectory name; defaults to the config name",
+    )
+    parser.add_argument(
         "--config-script",
         default=str(DEFAULT_CONFIG_SCRIPT),
         help="gem5 Python config script",
@@ -124,6 +128,8 @@ def parse_args():
     )
     parser.add_argument("--mem-size", default="512MiB")
     parser.add_argument("--cache-line-size", type=int, default=64)
+    parser.add_argument("--cache-mshrs", type=int)
+    parser.add_argument("--cache-targets-per-mshr", type=int)
     parser.add_argument("--stream-segment-bytes", type=int, default=128)
     parser.add_argument("--stream-mem-burst-latency", type=int, default=176)
     parser.add_argument("--stream-mem-refill-latency", type=int)
@@ -197,6 +203,12 @@ def build_command(args, outdir: Path):
     ]
     if args.stridepf_on_access:
         cmd.append("--stridepf-on-access")
+    if args.cache_mshrs is not None:
+        cmd.extend(["--cache-mshrs", str(args.cache_mshrs)])
+    if args.cache_targets_per_mshr is not None:
+        cmd.extend(
+            ["--cache-targets-per-mshr", str(args.cache_targets_per_mshr)]
+        )
     if args.bench_arg:
         cmd.append("--options")
         cmd.extend(args.bench_arg)
@@ -210,6 +222,7 @@ def write_run_metadata(args, outdir: Path, cmd):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "dry_run": args.dry_run,
         "bench_name": args.bench_name,
+        "result_name": args.result_name or args.config,
         "config": args.config,
         "requested_profile": args.profile,
         "profile": selected_profile_name(args),
@@ -232,6 +245,8 @@ def write_run_metadata(args, outdir: Path, cmd):
             "cache_store_ports": (
                 1 if args.config in SINGLE_LSU_CONFIGS else 200
             ),
+            "cache_mshrs_override": args.cache_mshrs,
+            "cache_targets_per_mshr_override": args.cache_targets_per_mshr,
         },
         "stride_prefetcher": {
             "enabled": bool(stride_levels),
@@ -290,7 +305,8 @@ def main():
     require_file(benchmark, "benchmark")
     require_file(config_script, "gem5 config script")
 
-    outdir = Path(args.results_dir).resolve() / args.bench_name / args.config
+    result_name = args.result_name or args.config
+    outdir = Path(args.results_dir).resolve() / args.bench_name / result_name
     outdir.mkdir(parents=True, exist_ok=True)
 
     cmd = build_command(args, outdir)

@@ -143,15 +143,26 @@ def apply_o3_profile(cpu, profile, single_lsu=False):
     cpu.numPhysVecRegs = profile.phys_vec_regs
 
 
-def make_cache(cache_cls, cache_profile, prefetcher=None, **kwargs):
+def make_cache(
+    cache_cls,
+    cache_profile,
+    prefetcher=None,
+    mshrs=None,
+    tgts_per_mshr=None,
+    **kwargs,
+):
     cache = cache_cls(
         size=cache_profile.size,
         assoc=cache_profile.assoc,
         tag_latency=cache_profile.tag_latency,
         data_latency=cache_profile.data_latency,
         response_latency=cache_profile.response_latency,
-        mshrs=cache_profile.mshrs,
-        tgts_per_mshr=cache_profile.tgts_per_mshr,
+        mshrs=cache_profile.mshrs if mshrs is None else mshrs,
+        tgts_per_mshr=(
+            cache_profile.tgts_per_mshr
+            if tgts_per_mshr is None
+            else tgts_per_mshr
+        ),
         **kwargs,
     )
     if prefetcher is not None:
@@ -207,9 +218,19 @@ def build_system(args):
         l2_prefetcher = make_stride_prefetcher(args)
         l3_prefetcher = make_stride_prefetcher(args)
 
-    system.cpu.icache = make_cache(L1ICache, profile.l1i)
-    system.cpu.dcache = make_cache(L1DCache, profile.l1d, dcache_prefetcher)
-    system.l2cache = make_cache(L2Cache, profile.l2, l2_prefetcher)
+    cache_overrides = {
+        "mshrs": args.cache_mshrs,
+        "tgts_per_mshr": args.cache_targets_per_mshr,
+    }
+    system.cpu.icache = make_cache(
+        L1ICache, profile.l1i, **cache_overrides
+    )
+    system.cpu.dcache = make_cache(
+        L1DCache, profile.l1d, dcache_prefetcher, **cache_overrides
+    )
+    system.l2cache = make_cache(
+        L2Cache, profile.l2, l2_prefetcher, **cache_overrides
+    )
 
     system.membus = SystemXBar()
     system.l2bus = L2XBar()
@@ -227,7 +248,9 @@ def build_system(args):
                 f"config '{PAPER_STRIDE_CONFIG}'"
             )
         system.l3bus = L2XBar(width=16)
-        system.l3cache = make_cache(L3Cache, profile.l3, l3_prefetcher)
+        system.l3cache = make_cache(
+            L3Cache, profile.l3, l3_prefetcher, **cache_overrides
+        )
         system.l2cache.mem_side = system.l3bus.cpu_side_ports
         system.l3cache.cpu_side = system.l3bus.mem_side_ports
         system.l3cache.mem_side = system.membus.cpu_side_ports
@@ -272,6 +295,8 @@ def parse_args():
     parser.add_argument("--profile", default="auto")
     parser.add_argument("--mem-size", default="512MiB")
     parser.add_argument("--cache-line-size", type=int, default=64)
+    parser.add_argument("--cache-mshrs", type=int)
+    parser.add_argument("--cache-targets-per-mshr", type=int)
     parser.add_argument("--stream-segment-bytes", type=int, default=128)
     parser.add_argument("--stream-mem-burst-latency", type=int, default=176)
     parser.add_argument("--stream-mem-refill-latency", type=int, default=176)
