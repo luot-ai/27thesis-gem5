@@ -242,6 +242,57 @@ stream vadd / o3_stream_axi_functional:
   loadBurstBusyCycles = 11264
 ```
 
+### 单 LSU 第一版实测结果
+
+已新增以下独立配置，原配置保持不变：
+
+```text
+o3_single_lsu_nopf
+o3_stream_axi_functional_single_lsu
+```
+
+两组配置都使用：
+
+```text
+RdWrPort count = 1
+ReadPort count = 0
+WritePort count = 0
+cacheLoadPorts = 1
+cacheStorePorts = 1
+```
+
+静态数据 `N=1024`、ROI 只包含向量加核心循环，实测如下：
+
+| CPU/benchmark | config | ROI cycles | IPC |
+| --- | --- | ---: | ---: |
+| 原4端口 CPU / naive | `o3_nopf` | 12175 | 0.673840 |
+| 单 LSU CPU / naive | `o3_single_lsu_nopf` | 12959 | 0.633074 |
+| 原4端口 CPU / stream | `o3_stream_axi_functional` | 11870 | 0.262174 |
+| 单 LSU CPU / stream | `o3_stream_axi_functional_single_lsu` | 11870 | 0.262174 |
+
+单 LSU 使 naive 增加 784 cycles，即增加约 6.44%。stream ROI 不变，因为当前
+stream 核心循环的数据传输走 StreamEngine 简化 memory-side，SSS 也不占用普通
+`MemRead/MemWrite` FU。
+
+在相同单 LSU CPU 下：
+
+```text
+cycle reduction = 12959 - 11870 = 1089 cycles
+speedup = 12959 / 11870 = 1.0917x
+cycle reduction ratio = 8.40%
+```
+
+64B cacheline 对应 16 个 `int32` 元素，1024 个元素共有 64 组，因此：
+
+```text
+naive  = 202.48 cycles / 16 elements
+stream = 185.47 cycles / 16 elements
+收益    = 17.02 cycles / 16 elements
+```
+
+两组 benchmark 均通过程序自检。生成的 `config.ini` 也确认单 LSU 配置中的 combined
+`RdWrPort count=1`，且 `cacheLoadPorts/cacheStorePorts` 均为 1。
+
 single-LSU 后预期：
 
 ```text
@@ -271,4 +322,3 @@ operation per cycle. This profile is intended to approximate the single LSU
 constraint of the RTL baseline and the public BOOM LSU description; it is not
 a cycle-accurate BOOM reproduction.
 ```
-

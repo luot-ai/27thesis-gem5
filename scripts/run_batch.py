@@ -20,6 +20,8 @@ CONFIGS = (
     "o3_stridepf_d8",
     "o3_stridepf_l1d_l2_l3_d8",
     "o3_stream_axi_functional",
+    "o3_single_lsu_nopf",
+    "o3_stream_axi_functional_single_lsu",
 )
 
 

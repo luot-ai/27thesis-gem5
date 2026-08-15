@@ -20,8 +20,20 @@ from boom_like_profiles import get_profile
 
 PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
 STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
-STREAM_CONFIGS = ("o3_stream_axi_functional",)
-CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS, *STREAM_CONFIGS)
+SINGLE_LSU_CONFIGS = (
+    "o3_single_lsu_nopf",
+    "o3_stream_axi_functional_single_lsu",
+)
+STREAM_CONFIGS = (
+    "o3_stream_axi_functional",
+    "o3_stream_axi_functional_single_lsu",
+)
+CONFIG_CHOICES = (
+    "o3_nopf",
+    "o3_single_lsu_nopf",
+    *STRIDE_CONFIGS,
+    *STREAM_CONFIGS,
+)
 
 
 class L1ICache(Cache):
@@ -38,6 +50,26 @@ class L2Cache(Cache):
 
 class L3Cache(Cache):
     pass
+
+
+class SingleLsuRdWrPort(RdWrPort):
+    count = 1
+
+
+class SingleLsuFUPool(FUPool):
+    FUList = [
+        IntALU(),
+        IntMultDiv(),
+        FP_ALU(),
+        FP_MultDiv(),
+        ReadPort(),
+        SIMD_Unit(),
+        Matrix_Unit(),
+        System_Unit(),
+        PredALU(),
+        WritePort(),
+        SingleLsuRdWrPort(),
+    ]
 
 
 def selected_profile_name(args):
@@ -68,7 +100,7 @@ def make_stride_prefetcher(args):
     )
 
 
-def apply_o3_profile(cpu, profile):
+def apply_o3_profile(cpu, profile, single_lsu=False):
     cpu.fetchWidth = profile.fetch_width
     cpu.decodeWidth = profile.decode_width
     cpu.renameWidth = profile.rename_width
@@ -79,7 +111,12 @@ def apply_o3_profile(cpu, profile):
     cpu.squashWidth = profile.squash_width
 
     cpu.numROBEntries = profile.rob_entries
-    cpu.instQueues = [IQUnit(numEntries=profile.iq_entries)]
+    iq_args = {"numEntries": profile.iq_entries}
+    if single_lsu:
+        iq_args["fuPool"] = SingleLsuFUPool()
+        cpu.cacheLoadPorts = 1
+        cpu.cacheStorePorts = 1
+    cpu.instQueues = [IQUnit(**iq_args)]
     cpu.LQEntries = profile.lq_entries
     cpu.SQEntries = profile.sq_entries
 
@@ -125,7 +162,11 @@ def build_system(args):
 
     system.cpu = RiscvO3CPU(cpu_id=0)
     system.cpu.clk_domain = system.cpu_clk_domain
-    apply_o3_profile(system.cpu, profile)
+    apply_o3_profile(
+        system.cpu,
+        profile,
+        single_lsu=args.config in SINGLE_LSU_CONFIGS,
+    )
 
     if args.config in STREAM_CONFIGS:
         system.stream_engine = StreamEngine(

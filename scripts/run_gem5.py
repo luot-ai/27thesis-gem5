@@ -14,8 +14,20 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_SCRIPT = ROOT_DIR / "gem5_configs" / "riscv_o3_baseline.py"
 PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
 STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
-STREAM_CONFIGS = ("o3_stream_axi_functional",)
-CONFIG_CHOICES = ("o3_nopf", *STRIDE_CONFIGS, *STREAM_CONFIGS)
+SINGLE_LSU_CONFIGS = (
+    "o3_single_lsu_nopf",
+    "o3_stream_axi_functional_single_lsu",
+)
+STREAM_CONFIGS = (
+    "o3_stream_axi_functional",
+    "o3_stream_axi_functional_single_lsu",
+)
+CONFIG_CHOICES = (
+    "o3_nopf",
+    "o3_single_lsu_nopf",
+    *STRIDE_CONFIGS,
+    *STREAM_CONFIGS,
+)
 
 
 def selected_profile_name(args):
@@ -195,6 +207,13 @@ def write_run_metadata(args, outdir: Path, cmd):
             "cache_line_size": args.cache_line_size,
             "sys_clock": args.sys_clock,
             "cpu_clock": args.cpu_clock,
+            "single_lsu": args.config in SINGLE_LSU_CONFIGS,
+            "cache_load_ports": (
+                1 if args.config in SINGLE_LSU_CONFIGS else 200
+            ),
+            "cache_store_ports": (
+                1 if args.config in SINGLE_LSU_CONFIGS else 200
+            ),
         },
         "stride_prefetcher": {
             "enabled": bool(stride_levels),
