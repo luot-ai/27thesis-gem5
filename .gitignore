@@ -20,3 +20,6 @@ results/**/config.dot
 results/**/config.dot.pdf
 results/**/config.dot.svg
 results/**/citations.bib
+
+# O3PipeView traces are large local analysis artifacts.
+results/*_o3pipe/

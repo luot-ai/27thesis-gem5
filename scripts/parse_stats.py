@@ -109,9 +109,11 @@ def main():
     results_dir = Path(args.results_dir).resolve()
     output = Path(args.output).resolve() if args.output else results_dir / "summary.csv"
 
+    stats_paths = sorted(results_dir.glob("*/*/stats.txt"))
     rows = [
         row_for_stats(path, results_dir, args.stat_block)
-        for path in sorted(results_dir.glob("*/*/stats.txt"))
+        for path in stats_paths
+        if not path.relative_to(results_dir).parts[0].endswith("_o3pipe")
     ]
 
     output.parent.mkdir(parents=True, exist_ok=True)
