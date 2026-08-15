@@ -226,7 +226,19 @@ gem5 配置文件用于诊断。
 
 ## BOOM-like O3 配置说明
 
-当前 profile 是一个 Medium-like、受公开 BOOM 配置启发的 gem5 O3 baseline。核心参数包括：
+后续 kernel 的主对照配置为：
+
+```text
+o3_zircon_boom_medium_nopf
+o3_stream_axi_functional_zircon_boom_medium
+```
+
+它们使用 `decodeWidth=2`、单 LSU 和 L1D `2 MSHR`。L1I/L2 分别保持
+`8/32 MSHR`，每个 MSHR 允许 16 个 target。完整配置及选择依据见
+`notes/current_gem5_o3_baseline_spec.md`。
+
+项目最初的 `medium_boom_like` 是 4-wide、受公开 BOOM 配置启发的历史基础
+profile，核心参数如下：
 
 | 参数 | 当前值 |
 | --- | ---: |
@@ -256,7 +268,19 @@ It is not a cycle-accurate reproduction of BOOM.
 
 ## 当前结果摘要
 
-当前 `vadd` 的核心结果如下：
+固定 `decodeWidth=2`、单 LSU、L1D `2 MSHR` 后，`N=1024` vadd 的 ROI
+收敛结果如下：
+
+| 实现 | config | instructions | cycles | IPC |
+| --- | --- | ---: | ---: | ---: |
+| origin | `o3_zircon_boom_medium_nopf` | 8204 | 18195 | 0.450893 |
+| stream | `o3_stream_axi_functional_zircon_boom_medium` | 3112 | 11902 | 0.261469 |
+
+stream 减少 `6293 cycles`，周期降低 `34.59%`，加速比为 `1.529x`。当前
+stream 访存仍绕过 L1/L2 并使用固定延迟异步模型，因此该数字是接入 timing
+memory 接口前的阶段性结果。
+
+以下是早期 4-wide profile 下的预取实验结果，保留作历史参照：
 
 | benchmark | config | instructions | cycles | IPC | L1D misses |
 | --- | --- | ---: | ---: | ---: | ---: |

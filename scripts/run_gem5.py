@@ -18,6 +18,10 @@ ZIRCON_WIDTH_CONFIGS = (
     "o3_zircon_width_nopf",
     "o3_stream_axi_functional_zircon_width",
 )
+ZIRCON_BOOM_MEDIUM_CONFIGS = (
+    "o3_zircon_boom_medium_nopf",
+    "o3_stream_axi_functional_zircon_boom_medium",
+)
 ZIRCON_BLOCKING_CACHE_CONFIGS = (
     "o3_zircon_blocking_cache_nopf",
     "o3_stream_axi_functional_zircon_blocking_cache",
@@ -26,18 +30,21 @@ SINGLE_LSU_CONFIGS = (
     "o3_single_lsu_nopf",
     "o3_stream_axi_functional_single_lsu",
     *ZIRCON_WIDTH_CONFIGS,
+    *ZIRCON_BOOM_MEDIUM_CONFIGS,
     *ZIRCON_BLOCKING_CACHE_CONFIGS,
 )
 STREAM_CONFIGS = (
     "o3_stream_axi_functional",
     "o3_stream_axi_functional_single_lsu",
     "o3_stream_axi_functional_zircon_width",
+    "o3_stream_axi_functional_zircon_boom_medium",
     "o3_stream_axi_functional_zircon_blocking_cache",
 )
 CONFIG_CHOICES = (
     "o3_nopf",
     "o3_single_lsu_nopf",
     "o3_zircon_width_nopf",
+    "o3_zircon_boom_medium_nopf",
     "o3_zircon_blocking_cache_nopf",
     *STRIDE_CONFIGS,
     *STREAM_CONFIGS,
@@ -50,6 +57,8 @@ def selected_profile_name(args):
             return "paper_pf_stride_like"
         if args.config in ZIRCON_BLOCKING_CACHE_CONFIGS:
             return "zircon_blocking_cache_like"
+        if args.config in ZIRCON_BOOM_MEDIUM_CONFIGS:
+            return "zircon_boom_medium_like"
         if args.config in ZIRCON_WIDTH_CONFIGS:
             return "zircon_width_like"
         return "medium_boom_like"

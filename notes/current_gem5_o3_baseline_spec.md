@@ -18,6 +18,35 @@ The values below are taken from:
 - `gem5_configs/riscv_o3_baseline.py`
 - verified run config: `results/vadd_N16384/o3_nopf/config.ini`
 
+## 当前收敛评估配置（2026-08-15）
+
+后续 kernel 的 origin/stream 主对照固定为：
+
+```text
+o3_zircon_boom_medium_nopf
+o3_stream_axi_functional_zircon_boom_medium
+```
+
+该配置在下文原始 baseline 的基础上采用 Zircon 宽度近似和单 LSU：
+
+```text
+fetch/decode/rename/dispatch: 4/2/2/2
+issue/writeback/commit/squash: 5/5/2/2
+combined load/store issue port: 1
+L1I/L1D/L2 MSHRs: 8/2/32
+targets per MSHR: 16
+```
+
+其中 `decodeWidth=2` 和 L1D `nMSHRs=2` 对应当前选定的 BOOM Medium
+资源点。BOOM 的 `nMSHRs` 是 L1D 参数，因此 L1I/L2 沿用现有 `8/32`，不随
+L1D 一起改成 2。下文 `medium_boom_like` 的 4-wide、L1D 16-MSHR 配置仍保留
+为历史基础配置和敏感性分析参照。
+
+`N=1024` vadd 的当前 ROI 结果为：origin `18195 cycles`，stream
+`11902 cycles`，stream 周期降低 `34.59%`，加速 `1.529x`。当前 stream
+数据路径绕过 L1/L2 并使用固定延迟异步访存模型，因此这是接入 timing memory
+接口前的阶段性结果。
+
 ## Short Configuration Block
 
 ```text

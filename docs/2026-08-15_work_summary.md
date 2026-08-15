@@ -189,3 +189,34 @@ d6926fb  增加阻塞 Cache 配置并评估 MSHR 影响
 ```
 
 本轮另新增“扫描 origin 的 MSHR 饱和点”提交，保存扫描脚本、本文档和实测结果。
+
+## 后续 Kernel 的收敛配置
+
+后续 kernel 固定使用以下两组配置做 origin/stream 对照：
+
+```text
+o3_zircon_boom_medium_nopf
+o3_stream_axi_functional_zircon_boom_medium
+```
+
+两者均沿用 Zircon 宽度近似配置和单 LSU，其中 `decodeWidth=2`；L1D 采用
+BOOM Medium 的 `2 MSHR`，`tgts_per_mshr=16`。L1I/L2 仍保持当前的
+`8/32 MSHR`，因为 BOOM 的公开 `nMSHRs=2` 是 L1D 参数，不应直接套到所有
+cache level。其他配置保持不变，以便先收敛当前 vadd 的收益，再扩展到其他
+kernel。
+
+### N=1024 vadd 收敛结果
+
+| 实现 | 配置 | ROI cycles | ROI IPC |
+| --- | --- | ---: | ---: |
+| origin | `o3_zircon_boom_medium_nopf` | 18195 | 0.450893 |
+| stream | `o3_stream_axi_functional_zircon_boom_medium` | 11902 | 0.261469 |
+
+在该固定配置下，stream 减少 `6293 cycles`，周期降低 `34.59%`，相当于
+`1.529x` 加速。两边都通过 `N=1024` 程序自检。
+
+origin 的 L1D `blockedCycles::no_mshrs` 为 `13922 cycles`，stream 侧为
+`29 cycles`。收益从原 16-MSHR 对比的 `9.48%` 增加到 `34.59%`，主要因为
+2-MSHR 限制了 origin 的 cache miss 并行度，而当前 stream 数据访存绕过
+L1D/L2。因而 `34.59%` 是当前简化异步 stream 访存模型下的阶段性收敛值，
+待接入 gem5 timing memory 接口后仍需重新测量，不能直接作为最终论文结论。

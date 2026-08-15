@@ -24,6 +24,8 @@ CONFIGS = (
     "o3_stream_axi_functional_single_lsu",
     "o3_zircon_width_nopf",
     "o3_stream_axi_functional_zircon_width",
+    "o3_zircon_boom_medium_nopf",
+    "o3_stream_axi_functional_zircon_boom_medium",
     "o3_zircon_blocking_cache_nopf",
     "o3_stream_axi_functional_zircon_blocking_cache",
 )
