@@ -87,6 +87,49 @@ cycle reduction ratio = 9.48%
 这说明当前 `N=1024` vadd 中，单 LSU 是比 2-wide decode/commit 更明显的 origin
 约束；stream 版本仍主要受 StreamEngine 的访存延迟模型约束。
 
+## 阻塞 Cache 敏感性试验
+
+gem5 classic timing cache 不能将 MSHR 设为 0，否则 cache miss 无处保存请求和返回
+状态。新增以下配置，用 `1 MSHR + 1 target/MSHR` 近似不支持 miss 并行的阻塞
+cache：
+
+```text
+o3_zircon_blocking_cache_nopf
+o3_stream_axi_functional_zircon_blocking_cache
+```
+
+对应 profile 为 `zircon_blocking_cache_like`。L1I、L1D 和 L2 均配置为：
+
+```text
+mshrs = 1
+tgts_per_mshr = 1
+```
+
+其他参数保持 `zircon_width_like` 不变，包括流水线宽度、单 LSU、cache 容量、
+cacheline 和访问延迟。两组 `N=1024` benchmark 均通过程序自检。
+
+| CPU/benchmark | 正常 MSHR cycles | 阻塞 cache cycles | 变化 |
+| --- | ---: | ---: | ---: |
+| Zircon-width origin | 13149 | 34084 | +159.21% |
+| Zircon-width stream | 11902 | 12028 | +1.06% |
+
+在相同阻塞-cache 配置下：
+
+```text
+cycle reduction = 34084 - 12028 = 22056 cycles
+speedup = 34084 / 12028 = 2.8337x
+cycle reduction ratio = 64.71%
+```
+
+origin 的 L1D `overallMisses` 从 2468 降为 195 并不表示命中率变好。正常配置中，
+大量后续请求可以进入 cache 并合并为 MSHR hit；阻塞配置会让它们停在 cache 之外，
+等唯一 miss 完成后再访问，因此统计上的 miss 次数减少，但总周期显著增加。
+对应的 L1D `blockedCycles::no_mshrs` 从 0 增加到 30837 cycles，直接显示了唯一
+MSHR 被占用时产生的阻塞。
+
+该配置是敏感性分析的极端下界，不应直接称为“gem5 完全没有 MSHR”。当前 stream
+数据路径绕过 L1/L2，因此阻塞普通 cache 会显著放大 stream 相对 origin 的收益。
+
 ## 今日提交
 
 ```text

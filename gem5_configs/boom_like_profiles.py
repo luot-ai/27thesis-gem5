@@ -146,10 +146,20 @@ ZIRCON_WIDTH_LIKE = replace(
 )
 
 
+ZIRCON_BLOCKING_CACHE_LIKE = replace(
+    ZIRCON_WIDTH_LIKE,
+    name="zircon_blocking_cache_like",
+    l1i=replace(ZIRCON_WIDTH_LIKE.l1i, mshrs=1, tgts_per_mshr=1),
+    l1d=replace(ZIRCON_WIDTH_LIKE.l1d, mshrs=1, tgts_per_mshr=1),
+    l2=replace(ZIRCON_WIDTH_LIKE.l2, mshrs=1, tgts_per_mshr=1),
+)
+
+
 PROFILES = {
     "medium": MEDIUM_BOOM_LIKE,
     "medium_boom_like": MEDIUM_BOOM_LIKE,
     "paper_pf_stride_like": PAPER_PF_STRIDE_LIKE,
+    "zircon_blocking_cache_like": ZIRCON_BLOCKING_CACHE_LIKE,
     "zircon_width_like": ZIRCON_WIDTH_LIKE,
 }
 
