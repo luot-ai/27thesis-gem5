@@ -132,10 +132,25 @@ PAPER_PF_STRIDE_LIKE = replace(
 )
 
 
+ZIRCON_WIDTH_LIKE = replace(
+    MEDIUM_BOOM_LIKE,
+    name="zircon_width_like",
+    fetch_width=4,
+    decode_width=2,
+    rename_width=2,
+    dispatch_width=2,
+    issue_width=5,
+    wb_width=5,
+    commit_width=2,
+    squash_width=2,
+)
+
+
 PROFILES = {
     "medium": MEDIUM_BOOM_LIKE,
     "medium_boom_like": MEDIUM_BOOM_LIKE,
     "paper_pf_stride_like": PAPER_PF_STRIDE_LIKE,
+    "zircon_width_like": ZIRCON_WIDTH_LIKE,
 }
 
 

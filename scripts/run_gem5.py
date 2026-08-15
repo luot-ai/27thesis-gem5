@@ -14,17 +14,24 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_SCRIPT = ROOT_DIR / "gem5_configs" / "riscv_o3_baseline.py"
 PAPER_STRIDE_CONFIG = "o3_stridepf_l1d_l2_l3_d8"
 STRIDE_CONFIGS = ("o3_stridepf", "o3_stridepf_d8", PAPER_STRIDE_CONFIG)
+ZIRCON_WIDTH_CONFIGS = (
+    "o3_zircon_width_nopf",
+    "o3_stream_axi_functional_zircon_width",
+)
 SINGLE_LSU_CONFIGS = (
     "o3_single_lsu_nopf",
     "o3_stream_axi_functional_single_lsu",
+    *ZIRCON_WIDTH_CONFIGS,
 )
 STREAM_CONFIGS = (
     "o3_stream_axi_functional",
     "o3_stream_axi_functional_single_lsu",
+    "o3_stream_axi_functional_zircon_width",
 )
 CONFIG_CHOICES = (
     "o3_nopf",
     "o3_single_lsu_nopf",
+    "o3_zircon_width_nopf",
     *STRIDE_CONFIGS,
     *STREAM_CONFIGS,
 )
@@ -34,6 +41,8 @@ def selected_profile_name(args):
     if args.profile == "auto":
         if args.config == PAPER_STRIDE_CONFIG:
             return "paper_pf_stride_like"
+        if args.config in ZIRCON_WIDTH_CONFIGS:
+            return "zircon_width_like"
         return "medium_boom_like"
     return args.profile
 
